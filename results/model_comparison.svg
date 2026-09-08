@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="720" viewBox="0 0 1100 720" role="img" aria-labelledby="title desc">
+  <title id="title">ARDN and recovery strategy comparison</title>
+  <desc id="desc">Two-panel comparison of ARDN prediction error against baselines, and negotiation strategy behavior in the live simulation.</desc>
+  <rect width="1100" height="720" fill="#f5f7f5"/>
+  <text x="52" y="58" font-family="Arial,sans-serif" font-size="27" font-weight="700" fill="#17342f">Recovery intelligence comparison</text>
+  <text x="52" y="86" font-family="Arial,sans-serif" font-size="13" fill="#62736c">ARDN predictor quality versus the project’s live recovery strategies</text>
+  <rect x="48" y="112" width="610" height="530" rx="12" fill="#ffffff" stroke="#dbe4df"/>
+  <rect x="680" y="112" width="372" height="530" rx="12" fill="#ffffff" stroke="#dbe4df"/>
+  <text x="74" y="150" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#203b35">ARDN prediction quality</text>
+  <text x="74" y="172" font-family="Arial,sans-serif" font-size="11" fill="#74847e">Lower is better · captured evaluation results</text>
+  <text x="74" y="214" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#45625a">Recovery-time MAE (steps)</text>
+  <line x1="74" y1="365" x2="625" y2="365" stroke="#b8c8c1"/>
+  <line x1="74" y1="235" x2="625" y2="235" stroke="#e6ece8"/>
+  <line x1="74" y1="300" x2="625" y2="300" stroke="#e6ece8"/>
+  <text x="61" y="369" font-family="Arial,sans-serif" font-size="10" fill="#819089">0</text><text x="57" y="304" font-family="Arial,sans-serif" font-size="10" fill="#819089">3</text><text x="57" y="239" font-family="Arial,sans-serif" font-size="10" fill="#819089">6</text>
+  <rect x="180" y="318" width="90" height="47" rx="4" fill="#2f8c6e"/><rect x="385" y="252" width="90" height="113" rx="4" fill="#aebbb5"/>
+  <text x="205" y="309" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#246d55">2.17</text><text x="409" y="243" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#697a73">5.25</text>
+  <text x="173" y="386" font-family="Arial,sans-serif" font-size="11" fill="#45625a">ARDN</text><text x="374" y="386" font-family="Arial,sans-serif" font-size="11" fill="#45625a">Naive midpoint</text>
+  <text x="74" y="432" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#45625a">Trajectory MSE</text>
+  <line x1="74" y1="583" x2="625" y2="583" stroke="#b8c8c1"/><line x1="74" y1="508" x2="625" y2="508" stroke="#e6ece8"/><line x1="74" y1="545" x2="625" y2="545" stroke="#e6ece8"/>
+  <text x="57" y="587" font-family="Arial,sans-serif" font-size="10" fill="#819089">0</text><text x="46" y="549" font-family="Arial,sans-serif" font-size="10" fill="#819089">.005</text><text x="46" y="512" font-family="Arial,sans-serif" font-size="10" fill="#819089">.010</text>
+  <rect x="180" y="540" width="90" height="43" rx="4" fill="#2f8c6e"/><rect x="385" y="525" width="90" height="58" rx="4" fill="#aebbb5"/>
+  <text x="204" y="531" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#246d55">0.0058</text><text x="410" y="516" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#697a73">0.0077</text>
+  <text x="173" y="604" font-family="Arial,sans-serif" font-size="11" fill="#45625a">ARDN</text><text x="380" y="604" font-family="Arial,sans-serif" font-size="11" fill="#45625a">No-GAT ablation</text>
+  <text x="706" y="150" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="#203b35">Live strategy behavior</text>
+  <text x="706" y="172" font-family="Arial,sans-serif" font-size="11" fill="#74847e">12-day experiment · seed 42</text>
+  <text x="706" y="212" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#45625a">Invalid-agreement rate</text>
+  <line x1="706" y1="315" x2="1020" y2="315" stroke="#b8c8c1"/><rect x="742" y="312" width="58" height="3" fill="#78958a"/><rect x="843" y="212" width="58" height="103" fill="#b9793e"/><rect x="944" y="312" width="58" height="3" fill="#2f8c6e"/>
+  <text x="760" y="335" font-family="Arial,sans-serif" font-size="10" fill="#45625a">Rules</text><text x="844" y="335" font-family="Arial,sans-serif" font-size="10" fill="#45625a">Unverified</text><text x="957" y="335" font-family="Arial,sans-serif" font-size="10" fill="#45625a">Verified</text>
+  <text x="706" y="380" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#45625a">Verifier interventions</text>
+  <line x1="706" y1="483" x2="1020" y2="483" stroke="#b8c8c1"/><rect x="742" y="480" width="58" height="3" fill="#78958a"/><rect x="843" y="480" width="58" height="3" fill="#b9793e"/><rect x="944" y="380" width="58" height="103" fill="#2f8c6e"/>
+  <text x="760" y="503" font-family="Arial,sans-serif" font-size="10" fill="#45625a">0</text><text x="860" y="503" font-family="Arial,sans-serif" font-size="10" fill="#45625a">0</text><text x="966" y="503" font-family="Arial,sans-serif" font-size="10" fill="#45625a">4</text>
+  <text x="706" y="548" font-family="Arial,sans-serif" font-size="11" fill="#62736c">Verified agents reject unsafe proposals</text><text x="706" y="568" font-family="Arial,sans-serif" font-size="11" fill="#62736c">before the fallback plan executes.</text>
+  <line x1="52" y1="674" x2="1048" y2="674" stroke="#dbe4df"/><circle cx="72" cy="695" r="5" fill="#2f8c6e"/><text x="84" y="699" font-family="Arial,sans-serif" font-size="10" fill="#62736c">ARDN / verified</text><circle cx="190" cy="695" r="5" fill="#aebbb5"/><text x="202" y="699" font-family="Arial,sans-serif" font-size="10" fill="#62736c">baseline / ablation</text><circle cx="348" cy="695" r="5" fill="#b9793e"/><text x="360" y="699" font-family="Arial,sans-serif" font-size="10" fill="#62736c">unverified strategy</text>
+</svg>

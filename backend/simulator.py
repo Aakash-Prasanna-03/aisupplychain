@@ -3,7 +3,7 @@ import random
 from copy import deepcopy
 from .models import Node, Agreement, Disruption
 from .disruptions import effects
-from .config import LLM_ENABLED
+from .config import LLM_CONFIGURED, LLM_MODEL
 
 ORDER = ["supplier", "manufacturer", "distributor", "retailer"]
 EDGES = {("supplier","manufacturer"), ("manufacturer","distributor"), ("distributor","retailer")}
@@ -20,9 +20,9 @@ class SimulationEngine:
     def __init__(self, seed=42, disruption=None):
         self.seed=seed; self.rng=random.Random(seed); self.nodes=default_nodes(); self.day=0
         self.disruption=disruption or Disruption(); self.history=[]; self.total_cost=0.; self.demands=[]
-        self.last_demand=20.; self.negotiation=[]; self.verification=None; self.mode="verified"
+        self.last_demand=20.; self.negotiation=[]; self.verification=None; self.mode="verified"; self.mock_agents=not LLM_CONFIGURED
     def snapshot(self):
-        return {"day":self.day,"nodes":[n.model_dump() for n in self.nodes.values()],"total_cost":round(self.total_cost,2),"history":self.history,"negotiation":self.negotiation,"verification":self.verification,"mode":self.mode,"mock_agents":not LLM_ENABLED}
+        return {"day":self.day,"nodes":[n.model_dump() for n in self.nodes.values()],"total_cost":round(self.total_cost,2),"history":self.history,"negotiation":self.negotiation,"verification":self.verification,"mode":self.mode,"mock_agents":self.mock_agents,"agent_model":"mock" if self.mock_agents else LLM_MODEL}
     def step(self, agreement: Agreement|None=None):
         self.day += 1; fx=effects(self.disruption,self.day)
         supplier=self.nodes["supplier"]

@@ -1,0 +1,39 @@
+[held-out, n=60] trajectory MSE=0.0058  T_rec MAE(model)=2.17 steps  T_rec MAE(naive midpoint baseline)=5.25 steps
+
+[counterfactual ranking] fixed disruption: nodes=[np.int64(5)] severity=0.77 type=capacity
+action            ARDN T_rec  ARDN cost | true T_rec  true cost
+reallocate             11.92      99.94 |         11      40.00
+reroute                11.89      91.06 |         12      42.36
+delay                  11.89      94.72 |         13      50.27
+prioritize             11.79      90.52 |          9      25.28
+share_capacity         11.89     108.90 |         11      43.16
+emergency_source       11.56     112.76 |          7      59.16
+
+ARDN-predicted fastest-to-slowest: ['emergency_source', 'prioritize', 'share_capacity', 'delay', 'reroute', 'reallocate']
+Simulator's actual fastest-to-slowest: ['emergency_source', 'prioritize', 'reallocate', 'share_capacity', 'reroute', 'delay']
+Kendall's tau rank agreement: 0.47  (1.0 = perfect agreement, 0 = random, -1 = reversed)
+
+[counterfactual ranking, averaged over 8 disruptions]
+  disruption 0: severity=0.33 tau=+0.73
+  disruption 1: severity=0.65 tau=+0.07
+  disruption 2: severity=0.79 tau=+0.60
+  disruption 3: severity=0.41 tau=+0.20
+  disruption 4: severity=0.38 tau=+0.47
+  disruption 5: severity=0.36 tau=+0.07
+  disruption 6: severity=0.58 tau=+0.07
+  disruption 7: severity=0.60 tau=+0.20
+mean Kendall's tau over 8 disruptions: +0.30 (std 0.25)
+
+[OOD novelty check]
+typical episode novelty score:  3.27
+network-wide extreme-disruption novelty score: 46.91  (should be notably higher)
+
+[calibration, cost head, n=100] within predicted 1-sigma: 79% (ideal ~68%)  within 2-sigma: 99% (ideal ~95%)
+
+[topology generalization] evaluating on an unseen, larger network (3 nodes/echelon vs. the trained 2 nodes/echelon)...
+trajectory MSE on unseen 12-node topology: 0.0048 (compare to held-out MSE on the trained 8-node topology above)
+
+[ablation] training FULL model vs. NO-GAT model, matched budget/data...
+FULL model (with heterogeneous graph attention) trajectory MSE: 0.0153
+NO-GAT ablation (flat pooled-MLP)              trajectory MSE: 0.0077
+-> graph attention does NOT help (ratio: 0.50x)

@@ -1,0 +1,7 @@
+const agents=[
+  {name:'Supplier agent',role:'Protects upstream supply and production capacity',initial:'S'},
+  {name:'Manufacturer agent',role:'Balances inbound material and production flow',initial:'M'},
+  {name:'Distributor agent',role:'Maintains downstream inventory availability',initial:'D'},
+  {name:'Retailer agent',role:'Advocates for customer service continuity',initial:'R'},
+];
+export default function AgentRoster({active,real}:{active:boolean;real:boolean}){const label=real?'Qwen3.5 agents':'Mock LLM agents';return <section className="panel agent-panel" aria-labelledby="agents-title"><div className="panel-heading"><div><p className="eyebrow">NEGOTIATION TEAM</p><h2 id="agents-title">{label}</h2><p>Role-specific proposals, then verifier-guided revision</p></div><span className="agent-mode"><i aria-hidden="true"/>{active?'Ran this scenario':'Ready'}</span></div><div className="agent-roster">{agents.map(agent=><article key={agent.initial}><span className="agent-avatar" aria-hidden="true">{agent.initial}</span><div><b>{agent.name}</b><p>{agent.role}</p></div><span className="agent-status">{real?'Qwen':'Mock'}</span></article>)}</div><p className="agent-note">{real?'Each agent is powered by the configured Qwen endpoint. The deterministic verifier still gates execution.':'These local agents are deterministic stand-ins for the Qwen workflow. They do not call an external model or use an API key.'}</p></section>}

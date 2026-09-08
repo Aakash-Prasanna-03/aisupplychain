@@ -1,0 +1,31 @@
+panel,model,metric,value,unit,dataset,source,measurement_status,comparability_note
+published_supply_chain,Proposed Hybrid,MAE,15.02,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Hybrid TFT-X,MAE,15.29,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Informer,MAE,15.44,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,TFT,MAE,15.67,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,PPO forecasting agent,MAE,15.78,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,GRU,MAE,17.23,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,LSTM,MAE,17.89,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Prophet,MAE,20.15,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,ARIMA,MAE,22.47,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Proposed Hybrid,RMSE,20.41,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Hybrid TFT-X,RMSE,20.72,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Informer,RMSE,20.97,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,TFT,RMSE,21.18,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,PPO forecasting agent,RMSE,21.40,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,GRU,RMSE,22.94,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,LSTM,RMSE,23.58,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Prophet,RMSE,26.04,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,ARIMA,RMSE,28.66,units,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Proposed Hybrid,MAPE,8.9,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Hybrid TFT-X,MAPE,9.1,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Informer,MAPE,9.2,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,TFT,MAPE,9.3,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,PPO forecasting agent,MAPE,9.4,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Proposed Hybrid,sMAPE,8.4,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Hybrid TFT-X,sMAPE,8.6,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,Informer,sMAPE,8.7,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,TFT,sMAPE,8.8,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+published_supply_chain,PPO forecasting agent,sMAPE,8.9,percent,supply chain dataset,https://www.techscience.com/cmc/v88n3/68058.html,reported_exact,Same published benchmark table as the other external rows
+ardn_local,ARDN,trajectory MSE,0.0058,MSE,ARDN local evaluation,model/eval_output.txt,measured_local,Not comparable to published demand MAE/RMSE; different target and dataset
+ardn_local,ARDN,T_rec MAE,2.17,time units,ARDN local evaluation,model/eval_output.txt,measured_local,Not comparable to published demand MAE/RMSE; different target and dataset

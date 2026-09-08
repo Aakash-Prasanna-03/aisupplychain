@@ -1,0 +1,845 @@
+SIGNAL CHAIN - COMPLETE PROJECT FUNCTIONING AND TECHNICAL REFERENCE
+====================================================================
+
+Document purpose
+----------------
+This document describes the implementation currently in this repository. It is
+the operational reference for running, understanding, testing, and extending
+the project. It documents actual code behavior, including fallbacks and
+limitations; it does not describe features that have not been implemented.
+
+Project identity
+----------------
+Name: Signal Chain
+Purpose: a local supply-chain resilience decision sandbox.
+Primary question: given a disruption, which recovery plan is worth considering,
+and does it satisfy the hard operating constraints before execution?
+
+The system combines five layers:
+
+  1. A deterministic four-echelon live simulator.
+  2. Four role-specific negotiation agents.
+  3. A deterministic verifier that is the execution gate.
+  4. ARDN (Action-Conditioned Recovery Dynamics Network), an advisory forecaster.
+  5. A React/Vite frontend that presents the state, negotiation, verification,
+     forecast, and experiment comparison.
+
+The model and the live application are related but are not the same simulator.
+ARDN was trained on its own synthetic graph simulator. The backend adapter maps
+the live four-node state into the ARDN feature contract so that the included
+trained artifact can provide an advisory forecast.
+
+
+1. Repository layout
+--------------------
+
+backend/
+  __init__.py             Python package marker.
+  main.py                 FastAPI application, routes, and orchestration.
+  config.py               Environment-variable loading and LLM/verifier config.
+  models.py               Pydantic request, state, shipment, agreement, and
+                          verifier schemas.
+  simulator.py            Live four-echelon deterministic simulator.
+  disruptions.py          Time-window disruption effects.
+  policies.py             Classical rules-only shipment policy.
+  agents.py               Qwen-compatible HTTP client and deterministic fallback.
+  negotiation.py          Multi-agent proposal, verifier, retry, and fallback loop.
+  verifier.py             Deterministic safety and fairness checks.
+  ardn_service.py         Adapter and loader for model/trained_model.pkl.
+  experiments.py          Classical/unverified/verified strategy experiment.
+  database.py              Minimal SQLite persistence for experiment payloads.
+  test_app.py              Lightweight unit/integration tests.
+  requirements.txt         Backend Python dependencies.
+
+frontend/
+  package.json             React, Vite, TypeScript, and Recharts dependencies.
+  vite.config.ts           Vite React plugin configuration.
+  index.html               Browser entry document.
+  src/main.tsx             React root with StrictMode.
+  src/App.tsx              Main workflow and dashboard composition.
+  src/api.ts               Fetch wrapper and API functions.
+  src/types.ts             Frontend TypeScript shapes.
+  src/components/          Controls, network, metrics, negotiation log,
+                           verifier, agents, forecast, and comparison UI.
+  src/style.css            Main responsive design system.
+  src/forecast.css         ARDN forecast styles.
+  src/agents.css           Agent roster styles.
+
+model/
+  model.py                 ARDN architecture and prediction heads.
+  simulator.py             Synthetic graph supply-chain simulator used for ARDN.
+  autograd.py              Small NumPy reverse-mode autodiff implementation.
+  train(1).py              Original ARDN training loop.
+  train.py                 Import-safe shim around train(1).py.
+  evaluate.py              Held-out, ranking, OOD, calibration, topology, and
+                           ablation evaluation routines.
+  trained_model.pkl        Included serialized trained artifact.
+  eval_output.txt          Captured evaluation output for the included artifact.
+  README.md                Model-specific documentation and limitations.
+
+results/
+  model_comparison.*       Local strategy comparison graph and data.
+  model_architecture_comparison.*
+                           Design rubric only; not an empirical leaderboard.
+  research_benchmark_comparison.*
+                           Published external benchmark values, with ARDN kept
+                           separate because the tasks are not comparable.
+  ardn_honest_assessment.* Honest local results, negative findings, and status.
+  ARDN_HONEST_ASSESSMENT.md
+                           Written interpretation of what ARDN does and does not
+                           prove.
+  README.md                Result provenance and comparability warnings.
+
+Root files:
+  README.md                Quick-start documentation and troubleshooting.
+  .env.example             Qwen/local-provider configuration template.
+  research.db              Created at runtime for saved experiment payloads.
+  PROJECT_FUNCTIONING.txt  This document.
+
+
+2. Runtime requirements
+-----------------------
+
+Required:
+  - Windows PowerShell or an equivalent shell.
+  - Python 3.12 or newer.
+  - Node.js and npm.
+  - Internet access only if installing packages or using a hosted Qwen API.
+
+Backend Python packages from backend/requirements.txt:
+  fastapi>=0.110
+  uvicorn[standard]>=0.27
+  pydantic>=2.0
+  numpy>=1.26
+  scipy>=1.11
+  python-dotenv>=1.0
+
+NumPy and SciPy are required by the ARDN artifact/runtime. The Qwen adapter
+uses Python's standard urllib; it does not require an OpenAI SDK.
+
+Frontend packages are installed by npm from frontend/package.json. The app uses
+React, React DOM, Vite, TypeScript, and Recharts (the current UI mostly uses
+HTML/CSS and table components).
+
+
+3. Installation and startup
+----------------------------
+
+Run these commands from the repository root:
+
+  python -m venv .venv
+  .\.venv\Scripts\Activate.ps1
+  python -m pip install -r backend\requirements.txt
+
+Start the backend in the repository root, not in frontend:
+
+  python -m uvicorn backend.main:app --reload
+
+The backend normally listens at:
+  http://127.0.0.1:8000
+  http://127.0.0.1:8000/docs       (Swagger UI)
+  http://127.0.0.1:8000/api/health
+
+Start the frontend in a second PowerShell window:
+
+  cd frontend
+  npm install
+  npm run dev
+
+Open the Vite URL, normally:
+  http://localhost:5173
+
+The frontend API base is hard-coded in frontend/src/api.ts as:
+  http://localhost:8000/api
+
+The backend CORS allow-list currently permits only:
+  http://localhost:5173
+
+If the frontend is served from another origin, update the CORS configuration in
+backend/main.py and the BASE constant in frontend/src/api.ts.
+
+
+4. Environment variables and Qwen behavior
+-------------------------------------------
+
+Copy the template if real Qwen agents are wanted:
+
+  Copy-Item .env.example .env
+
+Hosted OpenAI-compatible provider example:
+
+  LLM_ENABLED=true
+  QWEN_API_KEY=your_key
+  QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+  QWEN_MODEL=qwen3.5-plus
+  LLM_TIMEOUT_SECONDS=30
+
+Local OpenAI-compatible server example (Ollama or another compatible server):
+
+  LLM_ENABLED=true
+  QWEN_API_KEY=local
+  QWEN_BASE_URL=http://localhost:11434/v1
+  QWEN_MODEL=qwen3.5:4b
+  LLM_TIMEOUT_SECONDS=60
+
+Additional verifier variables:
+
+  MIN_SERVICE_LEVEL=0.70
+  FAIRNESS_THRESHOLD=0.08
+
+backend/config.py loads the root .env with python-dotenv when available.
+LLM_CONFIGURED is true only when LLM_ENABLED is true and either an API key is
+present or the base URL is localhost/127.0.0.1.
+
+The default provider/model values are:
+  QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+  QWEN_MODEL=qwen3.5-plus
+  LLM_TIMEOUT_SECONDS=30
+
+The request path is:
+  POST {QWEN_BASE_URL}/chat/completions
+
+The payload contains:
+  model: configured QWEN_MODEL
+  messages: a system instruction plus a role-specific user prompt
+  temperature: 0.1
+
+For hosted endpoints, agents add response_format={"type":"json_object"}.
+For local endpoints, the prompt and parser enforce the shape because some local
+compatible servers do not consistently implement response_format.
+
+The parser accepts strict JSON, fenced JSON, or the first JSON object found in
+the response. The expected proposal object has:
+  proposer
+  shipments
+  production
+  reason
+
+Important fallback rule:
+  - If LLM_ENABLED is false, every proposal is deterministic mock behavior.
+  - If LLM_ENABLED is true but credentials, networking, JSON, or Pydantic
+    validation fail for one proposal, that proposal falls back to the local
+    deterministic proposal.
+  - A fallback proposal is marked '(Mock)' in the negotiation log.
+  - The run can therefore contain a mixture of real Qwen and fallback proposals.
+
+The health endpoint reports configuration, not proof that the latest request
+successfully reached Qwen. Check the negotiation log for per-agent '(Mock)'.
+Never commit .env or API keys.
+
+
+5. End-to-end user workflow
+---------------------------
+
+The default frontend flow is implemented in App.tsx::run():
+
+  1. User chooses disruption type, start day, duration, and severity.
+  2. Frontend POSTs /api/simulation with mode=verified, seed=42,
+     simulation_days=12, and the selected disruption.
+  3. Frontend POSTs /api/simulation/{id}/step four times. Each step advances
+     the live engine with classical_policy. Four steps place the engine just
+     before the default day-5 disruption.
+  4. Frontend POSTs /api/simulation/{id}/negotiate.
+  5. The backend creates role-specific proposals, verifies them, retries if the
+     mode is verified, executes the resulting agreement for one step, and asks
+     ARDN for six advisory action forecasts.
+  6. Frontend POSTs /api/experiment. This runs classical, unverified, and
+     verified strategies over the 12-day scenario and renders a comparison.
+  7. The dashboard renders network health, pulse metrics, verifier status,
+     agent roster, negotiation trail, ARDN forecast, and experiment table.
+
+The simulation ID and engine are kept in an in-memory Python dictionary. A
+backend restart invalidates existing IDs. Experiment payloads are also written
+to SQLite, but the current GET experiment endpoint reads the in-memory copy.
+
+
+6. Live simulator technical behavior
+-------------------------------------
+
+The live simulator is backend/simulator.py::SimulationEngine.
+
+Network order:
+  supplier -> manufacturer -> distributor -> retailer
+
+Initial nodes:
+  supplier:      inventory 100, shipping capacity 80, production 80
+  manufacturer:  inventory 60,  shipping capacity 60, production 50
+  distributor:   inventory 40,  shipping capacity 50, production 0
+  retailer:      inventory 30,  shipping capacity 40, production 0
+
+Default node economics:
+  holding_cost=0.2
+  shortage_cost=4
+  service_level_target=0.9
+  service_level starts at 1.0
+
+SimulationEngine state includes:
+  seed, deterministic random.Random instance, nodes, day, disruption,
+  history, total_cost, demands, last_demand, negotiation, verification,
+  mode, and mock_agents.
+
+Each step:
+  1. Increment day.
+  2. Compute disruption effects for that day.
+  3. Replenish supplier inventory subject to capacity and disrupted production.
+  4. Apply agreement production and shipments.
+  5. Enforce valid edges and available source/destination storage during actual
+     shipment application by clipping quantities.
+  6. Sample demand as 20 * demand_factor plus a deterministic seeded integer
+     noise in [-2, 2].
+  7. Serve retailer demand from retailer inventory.
+  8. Update retailer service_level and AT RISK status when service < 0.70.
+  9. Add all-node holding cost and retailer shortage cost to total_cost.
+  10. Append day, demand, served, service level, and inventories to history.
+
+Disruption schema:
+  type: supplier_capacity_drop | route_closure | demand_spike
+  start_day: integer
+  duration: integer
+  severity: 0..1
+
+The active interval is:
+  start_day <= day < start_day + duration
+
+Effects while active:
+  supplier_capacity_drop:
+    supplier production factor = 1 - severity
+  route_closure:
+    shipments whose source is supplier are blocked during application
+  demand_spike:
+    demand_factor = 1 + severity
+
+The live simulator's default policy sends up to 20 units on each adjacent
+route, clipped by source inventory, source capacity, and destination free space.
+
+
+7. Data models and API contracts
+---------------------------------
+
+Pydantic models in backend/models.py:
+
+Node:
+  id: supplier | manufacturer | distributor | retailer
+  name, inventory, capacity, production_capacity
+  holding_cost, shortage_cost, service_level_target
+  service_level, status
+
+Shipment:
+  from (internally from_node), to, quantity >= 0
+  valid routes are supplier->manufacturer, manufacturer->distributor,
+  distributor->retailer.
+
+Production:
+  node, quantity >= 0
+
+Proposal:
+  proposer, shipments list, production list, reason
+
+Agreement:
+  shipments list, production list, priority_allocations dictionary
+
+SimulationRequest:
+  seed=42
+  mode=classical | unverified | verified
+  disruption object
+  simulation_days=12, restricted to 1..60
+
+Disruption defaults:
+  supplier_capacity_drop, start day 5, duration 5, severity 0.4
+
+VerificationResult:
+  valid boolean
+  violations list of {constraint, message}
+  projected_metrics dictionary
+
+API routes:
+
+GET /api/health
+  Returns status, mock_agents, llm_enabled, and agent_model.
+
+POST /api/simulation
+  Body: SimulationRequest.
+  Creates an engine and returns id plus its initial snapshot.
+
+GET /api/simulation/{id}
+  Returns the current in-memory snapshot or 404 for an unknown ID.
+
+POST /api/simulation/{id}/step
+  Applies classical_policy and advances one day.
+
+POST /api/simulation/{id}/disruption
+  Replaces the engine disruption and returns a snapshot.
+
+POST /api/simulation/{id}/negotiate
+  Runs negotiation with verification determined by engine.mode, stores the log
+  and verifier result, executes the chosen agreement for one step, and returns
+  the updated snapshot plus meta and forecast.
+
+GET /api/simulation/{id}/negotiation
+  Returns negotiation log and verifier result.
+
+POST /api/experiment
+  Body: SimulationRequest. Runs all three modes and returns an experiment id
+  and result dictionary. Saves the complete payload to research.db.
+
+GET /api/experiment/{id}
+  Returns the in-memory experiment payload.
+
+GET /api/experiment/{id}/comparison
+  Returns only the metrics dictionary for classical, unverified, and verified.
+
+Snapshot fields normally include:
+  day, nodes, total_cost, history, negotiation, verification, mode,
+  mock_agents, agent_model.
+
+
+8. Negotiation and verifier
+----------------------------
+
+Roles:
+  supplier       protects upstream supply and capacity
+  manufacturer   stabilizes material flow into production
+  distributor    protects downstream inventory
+  retailer       preserves customer service continuity
+
+The deterministic fallback proposal:
+  - supplier proposes up to 70 units in round 1, or 48 after feedback,
+    clipped by supplier inventory;
+  - the other roles propose up to 25 units;
+  - each role uses its adjacent route and a role-specific reason.
+
+Negotiation loop:
+  - maximum four rounds;
+  - each round asks all four roles for a proposal;
+  - build_agreement keeps the maximum quantity for duplicate route keys and
+    concatenates production requests;
+  - verify_agreement checks the agreement;
+  - in unverified mode, the first agreement executes even if invalid;
+  - in verified mode, invalid proposals produce verifier feedback and another
+    round;
+  - after four failed rounds, classical_policy is used as an emergency fallback.
+
+Verifier checks:
+  1. INVALID_ROUTE: every shipment is one of the three live network edges.
+  2. PRODUCTION_LIMIT: production does not exceed node production capacity.
+  3. CAPACITY_LIMIT: outgoing quantity does not exceed source shipping capacity.
+  4. NEGATIVE_INVENTORY: source balances and all post-agreement balances stay
+     non-negative.
+  5. STORAGE_CAPACITY: post-agreement balance does not exceed node capacity.
+  6. MIN_SERVICE_LEVEL: projected retailer service must meet MIN_SERVICE_LEVEL,
+     default 70 percent.
+  7. FAIRNESS: variance of manufacturer/distributor/retailer balances divided
+     by capacity must not exceed FAIRNESS_THRESHOLD, default 0.08.
+
+Projected retailer service is calculated from projected retailer balance and
+the most recent demand. This is a guardrail estimate, not a full future rollout.
+The verifier is deterministic and remains the hard execution gate even when
+Qwen proposes the plan.
+
+
+9. ARDN model: architecture and data contract
+-----------------------------------------------
+
+ARDN is implemented in model/model.py using NumPy and the local autograd engine.
+There is no batch dimension inside graph operations because topology sizes can
+vary. Training loops over episodes and averages gradients across small batches.
+
+Synthetic training graph:
+  - four node types: Supplier, Manufacturer, Distributor, Retailer;
+  - default training network: two nodes per echelon, eight nodes total;
+  - directed complete connections between adjacent echelons;
+  - optional lateral/sibling connections for capacity sharing;
+  - model is designed to transfer to other node counts through pooling.
+
+Feature dimensions:
+  NODE_FEAT_DIM = 25:
+    9 base features: inventory, in-flow proxy, out-flow proxy, capacity,
+    backlog, lead time placeholder, service, unit cost, contract floor;
+    7 disruption features: flag, severity, remaining duration, four-type one-hot;
+    9 action features: source flag, target flag, six-action one-hot, magnitude.
+  EDGE_FEAT_DIM = 5:
+    capacity, lead time, route status, shipment quantity, disrupted flag.
+  GLOBAL_D_DIM = 4:
+    disrupted fraction, maximum severity, normalized duration, cooccurrence.
+  GLOBAL_A_DIM = 8:
+    six-action one-hot, action magnitude, normalized action duration.
+  HIST_DIM = 2:
+    mean service and minimum service per history row; default four history rows.
+
+Architecture:
+  1. TypeAwareEncoder: one MLP per node type, 25 -> 32 node embedding.
+  2. Two HeteroGATLayer instances, each 32-dimensional.
+     Attention uses transformed receiving node, sending node, and transformed
+     edge features. Segment softmax is computed over edges sharing a destination.
+  3. FiLM conditioning generates gamma/beta from global disruption/action
+     descriptors and modulates graph messages.
+  4. Attention pooling turns node embeddings into a graph embedding.
+  5. A history GRU maps two-feature history rows to an 8-dimensional state.
+  6. An initialization MLP combines graph and history state into a 32-dimensional
+     latent recovery state.
+  7. A dynamics GRU rolls the latent state for the model horizon (15 by default).
+  8. A per-node sigmoid decoder produces service trajectories.
+  9. A hazard head predicts per-step recovery probability; the hazard distribution
+     is converted to expected recovery time and variance.
+  10. Evidential Normal-Inverse-Gamma heads predict cost and fairness with point
+      estimates plus uncertainty parameters.
+  11. A risk head predicts a violation probability.
+  12. Mahalanobis distance of the graph embedding supplies the novelty/OOD score.
+
+ARDN constructor switches support ablations:
+  use_film, use_gat, use_dynamics, use_action, use_hazard, use_evidential.
+
+Prediction output includes:
+  T_rec                 expected recovery step
+  T_rec_var             hazard-derived recovery variance
+  L_service             maximum service deficit relative to tau (default 0.9)
+  cost                  Normal-Inverse-Gamma parameters
+  fair                  Normal-Inverse-Gamma parameters
+  risk_p                predicted violation probability
+  s_hat_seq             per-node service trajectory
+  z_G                  graph latent
+  pool_w                node pooling weights
+
+
+10. ARDN synthetic simulator and training
+------------------------------------------
+
+The model simulator is model/simulator.py::SupplyChainSim, not the live
+backend simulator. It generates episodes containing a disruption, a chosen
+action, a service trajectory, costs, recovery time, fairness gap, and violation
+label.
+
+Actions:
+  reallocate, reroute, delay, prioritize, share_capacity, emergency_source
+
+Disruption types:
+  supply, demand, transport, capacity
+
+Episode target calculations:
+  - trajectory: service for every node at every rollout step;
+  - t_rec: first step at which every node reaches tau=0.9, or horizon if
+    recovery is censored;
+  - service_loss: maximum deficit below tau;
+  - cum_cost: sum of per-step action/backlog costs;
+  - fairness_gap: sum of per-step service variance;
+  - violated: true when backlog exceeds 1.5 times capacity.
+
+Default training settings in train(1).py:
+  epochs=8
+  episodes_per_epoch=40
+  horizon schedule=(4, 7, 10, 15)
+  learning rate=0.003
+  seed=0
+  batch_size=4
+
+Losses:
+  - mean squared trajectory loss across the horizon;
+  - binary cross-entropy for per-step recovery hazard;
+  - evidential Normal-Inverse-Gamma negative log likelihood for cost;
+  - evidential NIG loss for fairness;
+  - binary cross-entropy for violation risk;
+  - auxiliary MSE for expected recovery time.
+
+The first four shared tasks use learnable homoscedastic log-variance weights.
+Risk is multiplied by 0.3 and recovery-time MSE by 0.1. The evidential heads
+also include an evidence regularizer.
+
+At the end of training, graph embeddings from the final epoch are used to fit:
+  ood_mean = mean embedding
+  ood_cov_inv = inverse regularized covariance
+
+The serialized artifact contains the model state arrays, horizon, tau, OOD
+statistics, network metadata, and training history. The backend loads this
+artifact; it does not retrain at web-request time.
+
+To run model tools directly:
+
+  .\.venv\Scripts\Activate.ps1
+  python -m pip install -r backend\requirements.txt
+  cd model
+  python simulator.py
+  python evaluate.py
+
+The model scripts assume the working directory is model because their imports
+are local absolute imports (for example, from simulator import ...).
+
+
+11. Live-to-ARDN adapter
+------------------------
+
+backend/ardn_service.py loads model/trained_model.pkl once per API process with
+an lru_cache. It inserts model/ into sys.path because the artifact's modules use
+local imports.
+
+Live disruption mapping:
+  supplier_capacity_drop -> ARDN type capacity, target node 0
+  route_closure          -> ARDN type transport, target node 1
+  demand_spike           -> ARDN type demand, target node 3
+
+The adapter uses default_network(n_per_echelon=1), therefore the live forecast
+episode has four model nodes. It creates a synthetic SupplyChainSim episode and
+then overwrites the model simulator's inventory, capacity, demand, unit costs,
+service levels, and contract floors from the live engine.
+
+Action encoding:
+  source = max(0, target - 1)
+  target = mapped target
+  magnitude = severity clipped to [0.2, 1.0]
+  action duration clipped to [2, 6]
+  disruption duration clipped to [2, 8]
+
+For each of six actions the adapter:
+  1. Builds an ARDN feature episode.
+  2. Calls model.predict.
+  3. Converts cost mean back from the training /20 scale.
+  4. Computes an approximate cost interval from evidential variance.
+  5. Returns recovery days, recovery uncertainty, cost, cost interval, service
+     loss, risk probability, service trajectory, and OOD score.
+
+Results are sorted by predicted recovery_days, then predicted_cost. The first
+item is returned as recommendation; the other five are alternatives.
+
+ARDN is advisory only. forecast_for_engine never authorizes or executes a
+shipment. Negotiation and verifier execution happen separately.
+
+If the artifact is missing or cannot be imported, the forecast response is:
+  {"status":"unavailable", "model":"ARDN", "message":"..."}
+
+
+12. Frontend behavior and accessibility
+----------------------------------------
+
+The frontend is a single React page composed in App.tsx.
+
+Scenario controls:
+  - select disruption type;
+  - numeric start day (1..12);
+  - numeric duration (1..12);
+  - severity range (.1.. .8, displayed as a percentage);
+  - Run scenario button with busy state.
+
+Rendered areas after a run:
+  - Network health: four nodes, inventory, capacity, service, and risk status.
+  - Scenario pulse: day, average service, total cost, verifier interventions.
+  - Safety review: approved/reviewing state and constraint checks.
+  - Negotiation team: four roles and Qwen/mock status.
+  - Negotiation trail: proposals, verifier rejections, approval, and fallback.
+  - ARDN recovery forecast: recommendation, predicted recovery, cost interval,
+    risk, OOD novelty, and all six alternatives.
+  - Strategy comparison: classical, unverified, verified metrics.
+
+Accessibility/UX features implemented:
+  - skip-to-workspace link;
+  - visible labels associated with form controls;
+  - aria-labelledby section labels;
+  - alert role for API failure;
+  - aria-live negotiation log;
+  - semantic headings, lists, tables, and details/summary disclosure;
+  - keyboard focus styles;
+  - responsive layouts for <=900, <=700, <=600, and <=450px widths;
+  - color and text status indicators rather than color alone in key panels.
+
+The frontend displays a “Mock agents” badge whenever the returned state says
+mock_agents=true. A configured provider can still fall back per proposal; read
+the log for the authoritative status.
+
+
+13. Strategy experiment details
+-------------------------------
+
+backend/experiments.py::run_experiment runs:
+  classical, unverified, verified
+
+For each mode, run_mode:
+  - creates a fresh seeded SimulationEngine;
+  - loops req.simulation_days times;
+  - creates classical_policy agreement each day;
+  - on the day immediately before the disruption starts (e.day + 1 equals
+    disruption.start_day), invokes negotiation for non-classical modes;
+  - executes one step per day;
+  - computes metrics from history and negotiation metadata.
+
+Returned metrics:
+  recovery_time:
+    first history day at/after disruption start where service >= .9, expressed
+    as day minus disruption start; fallback is remaining simulation length + 1.
+  peak_service_level_loss:
+    1 - minimum service level observed.
+  total_cost:
+    final live simulator holding plus shortage cost.
+  average_service_level:
+    arithmetic mean of daily service levels.
+  fairness_variance:
+    verifier projected fairness variance, or zero when none exists.
+  verifier_intervention_rate:
+    number of verifier rejections (despite the name, this is a count, not a
+    normalized rate).
+  renegotiation_count:
+    same rejection count.
+  negotiation_rounds:
+    number of rounds used by the negotiation call.
+  invalid_agreement_rate:
+    0 or 1 for whether the selected agreement was invalid in that run.
+
+The frontend labels the experiment as a 12-day simulation because it sends
+simulation_days=12. The current create/step/negotiate UI path itself performs
+four pre-negotiation steps and one negotiated step; the experiment path is the
+full 12-day loop.
+
+
+14. Database and persistence
+----------------------------
+
+backend/database.py uses sqlite3 with DB="research.db", relative to the process
+working directory. On startup, init_db creates:
+
+  runs(id TEXT PRIMARY KEY, payload TEXT)
+
+POST /api/experiment saves the JSON-serialized experiment payload with INSERT OR
+REPLACE. Current GET endpoints use the in-memory runs dictionary, so database
+loading after a process restart is not implemented. The database is local and
+has no authentication or multi-user concurrency layer.
+
+
+15. Testing and verification
+----------------------------
+
+Backend tests can be run from the root after dependency installation:
+
+  python -m pytest backend\test_app.py
+
+The tests cover:
+  - capacity violation rejection;
+  - negative inventory rejection;
+  - a valid shipment;
+  - verified negotiation retry behavior;
+  - all three experiment modes;
+  - deterministic seeded demand.
+
+Frontend production build:
+
+  cd frontend
+  npm run build
+
+Model evaluation:
+
+  cd model
+  python evaluate.py
+
+The included captured evaluation reports:
+  held-out trajectory MSE: 0.0058 (n=60)
+  recovery-time MAE: 2.17 steps
+  naive midpoint recovery MAE: 5.25 steps
+  one counterfactual Kendall tau: 0.47
+  mean Kendall tau over 8 disruptions: +0.30, std 0.25
+  typical OOD score: 3.27
+  extreme-disruption OOD score: 46.91
+  cost within 1-sigma: 79 percent
+  cost within 2-sigma: 99 percent
+  unseen 12-node topology MSE: 0.0048
+  full matched ablation MSE: 0.0153
+  no-GAT matched ablation MSE: 0.0077
+
+These are local synthetic evaluation results, not a cross-paper leaderboard.
+The no-GAT result is a negative finding: in the captured matched run, removing
+graph attention performed better.
+
+
+16. Honest limitations and safety boundaries
+----------------------------------------------
+
+1. ARDN was trained on a synthetic simulator, not historical supply-chain data.
+2. The live application has one node per echelon, while the model was trained
+   on a two-per-echelon graph and is adapted through a synthetic episode.
+3. A low trajectory MSE is only meaningful within the same dataset, target,
+   normalization, horizon, and split. It cannot be compared directly with a
+   published demand MAE or RMSE.
+4. No fair same-data benchmark against TFT, Informer, GRU, XGBoost, or a CA-HGAT
+   implementation currently exists in this repository.
+5. The exact name “CA-HGAT” has not been tied to a directly comparable published
+   supply-chain result in this project; no number should be invented for it.
+6. ARDN forecasts are advisory. The deterministic verifier, not ARDN or Qwen,
+   is responsible for hard execution constraints.
+7. OOD scores are novelty signals, not calibrated probabilities of failure.
+8. The uncertainty interval implementation is evidential and its observed
+   coverage is not proof of calibration.
+9. Qwen output is untrusted input. Pydantic validation, verifier checks, and the
+   fallback path are required before execution.
+10. There is no authentication, authorization, rate limiting, audit database,
+    or production-grade persistence layer.
+11. In-memory simulation IDs disappear when Uvicorn reloads or restarts.
+12. Hosted Qwen usage can incur provider costs/quotas. Local inference avoids
+    hosted token charges but consumes local compute, memory, storage, and power.
+
+The defensible current project claim is:
+  ARDN is a research prototype that beats the included naive midpoint baseline
+  on its synthetic recovery-time test and exposes useful action-conditioned
+  advisory signals. It is not proven to be the best model or ready for
+  unsupervised production decisions.
+
+
+17. Common troubleshooting
+---------------------------
+
+“No module named backend”:
+  Start Uvicorn from the repository root with:
+    python -m uvicorn backend.main:app --reload
+
+“No module named fastapi”:
+  Activate .venv and install backend requirements:
+    .\.venv\Scripts\Activate.ps1
+    python -m pip install -r backend\requirements.txt
+
+Frontend says it cannot reach local API:
+  Confirm backend is running on port 8000 and frontend on port 5173. Check
+  http://localhost:8000/api/health and inspect the browser network console.
+
+UI says Mock agents:
+  Verify LLM_ENABLED=true, QWEN_API_KEY or local endpoint configuration, and
+  restart the backend. Then inspect /api/health and negotiation log entries.
+
+Qwen request falls back to Mock:
+  Check endpoint URL, model name, API key, timeout, local server status, and
+  whether the response is valid JSON matching the proposal schema.
+
+ARDN forecast unavailable:
+  Confirm model/trained_model.pkl exists, NumPy/SciPy are installed, and the
+  backend can import model/model.py and its local autograd/simulator modules.
+
+Ollama local provider:
+  Confirm the server is running and the configured model exists. Typical checks:
+    ollama list
+    ollama serve
+
+Browser CORS error:
+  Use localhost:5173 for Vite or update the explicit backend CORS origin.
+
+
+18. Safe extension points
+--------------------------
+
+To add a new disruption:
+  1. Extend the Disruption Literal in backend/models.py.
+  2. Add effects in backend/disruptions.py.
+  3. Add verifier/route logic if necessary.
+  4. Add the frontend label and control option.
+  5. Add tests for active/inactive behavior.
+  6. Add ARDN mapping in ardn_service.py if the model supports it.
+
+To add a new agent provider:
+  1. Keep the Proposal Pydantic contract.
+  2. Implement provider call and strict JSON parsing in backend/agents.py.
+  3. Preserve per-proposal fallback and mock marking.
+  4. Keep verifier execution independent of the provider.
+
+To benchmark ARDN fairly:
+  1. Define one fixed generated dataset and train/validation/test split.
+  2. Run ARIMA, Prophet, LSTM/GRU, TFT/Informer, graph baselines, and ARDN on
+     identical episodes and targets.
+  3. Use identical horizons, seeds, normalization, and metrics.
+  4. Report mean and standard deviation across multiple seeds.
+  5. Include trajectory error, recovery-time error, action-ranking tau, cost
+     calibration, and OOD behavior.
+  6. Keep all external claims labeled as same-benchmark or cross-paper.
+
+End of document.

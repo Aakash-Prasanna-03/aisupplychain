@@ -7,13 +7,15 @@ from .policies import classical_policy
 from .negotiation import negotiate
 from .experiments import run_experiment
 from .database import init_db,save_run
+from .ardn_service import forecast_for_engine
+from .config import LLM_CONFIGURED, LLM_MODEL
 
 app=FastAPI(title="Trust-Verified Agentic Negotiation"); app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5173"],allow_methods=["*"],allow_headers=["*"])
 runs={}
 @app.on_event("startup")
 def start(): init_db()
 @app.get("/api/health")
-def health(): return {"status":"ok","mock_agents":True}
+def health(): return {"status":"ok","mock_agents":not LLM_CONFIGURED,"llm_enabled":LLM_CONFIGURED,"agent_model":"mock" if not LLM_CONFIGURED else LLM_MODEL}
 @app.post("/api/simulation")
 def create(req:SimulationRequest):
     id=str(uuid4()); e=SimulationEngine(req.seed,req.disruption); e.mode=req.mode; runs[id]={"engine":e,"request":req}; return {"id":id,**e.snapshot()}
@@ -32,7 +34,7 @@ def disruption(id:str,d:Disruption): runs[id]["engine"].disruption=d; return run
 def negotiate_route(id:str):
     r=runs.get(id)
     if not r: raise HTTPException(404,"Unknown simulation")
-    e=r["engine"]; agreement,result,log,meta=negotiate(e,e.mode=="verified"); e.negotiation=log;e.verification=result.model_dump(); e.step(agreement);return {**e.snapshot(),"meta":meta}
+    e=r["engine"]; agreement,result,log,meta=negotiate(e,e.mode=="verified"); e.negotiation=log;e.verification=result.model_dump(); e.step(agreement);return {**e.snapshot(),"meta":meta,"forecast":forecast_for_engine(e)}
 @app.get("/api/simulation/{id}/negotiation")
 def negotiation(id:str): return {"negotiation":runs[id]["engine"].negotiation,"verification":runs[id]["engine"].verification}
 @app.post("/api/experiment")

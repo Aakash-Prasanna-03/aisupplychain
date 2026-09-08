@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">Published supply-chain forecasting benchmark and ARDN local results</title>
+  <desc id="desc">The left panel shows exact MAE values reported in a published supply-chain dataset benchmark. The right panel shows ARDN's local trajectory MSE and recovery-time MAE separately because those metrics are not comparable.</desc>
+  <style>
+    .bg{fill:#f7f8fa}.ink{fill:#17202a;font-family:Arial,sans-serif}.muted{fill:#5e6b78;font-family:Arial,sans-serif}.grid{stroke:#d9e0e7;stroke-width:1}.bar{fill:#2b6cb0}.bar2{fill:#d97706}.panel{fill:#fff;stroke:#d9e0e7;stroke-width:1}.small{font-size:13px}.label{font-size:15px}.value{font-size:14px;font-weight:700}.h1{font-size:26px;font-weight:700}.h2{font-size:18px;font-weight:700}
+  </style>
+  <rect class="bg" width="1200" height="900"/>
+  <text class="ink h1" x="48" y="48">Research-backed comparison (reported values only)</text>
+  <text class="muted small" x="48" y="74">External rows are from one published supply-chain forecasting table; ARDN is shown separately from its local evaluation.</text>
+
+  <rect class="panel" x="40" y="105" width="720" height="650" rx="12"/>
+  <text class="ink h2" x="68" y="140">Published supply-chain dataset — MAE (lower is better)</text>
+  <text class="muted small" x="68" y="163">Exact values from Table 3 of the HAF-DS paper</text>
+  <line class="grid" x1="260" y1="188" x2="710" y2="188"/><line class="grid" x1="260" y1="300" x2="710" y2="300"/><line class="grid" x1="260" y1="412" x2="710" y2="412"/><line class="grid" x1="260" y1="524" x2="710" y2="524"/><line class="grid" x1="260" y1="636" x2="710" y2="636"/>
+  <text class="muted small" x="255" y="180">0</text><text class="muted small" x="365" y="180">5</text><text class="muted small" x="475" y="180">10</text><text class="muted small" x="585" y="180">15</text><text class="muted small" x="695" y="180">20+</text>
+  <text class="ink label" x="68" y="220">Proposed Hybrid</text><rect class="bar" x="260" y="202" width="330" height="28" rx="5"/><text class="ink value" x="602" y="222">15.02</text>
+  <text class="ink label" x="68" y="282">Hybrid TFT-X</text><rect class="bar" x="260" y="264" width="336" height="28" rx="5"/><text class="ink value" x="608" y="284">15.29</text>
+  <text class="ink label" x="68" y="344">Informer</text><rect class="bar" x="260" y="326" width="340" height="28" rx="5"/><text class="ink value" x="612" y="346">15.44</text>
+  <text class="ink label" x="68" y="406">TFT</text><rect class="bar" x="260" y="388" width="345" height="28" rx="5"/><text class="ink value" x="617" y="408">15.67</text>
+  <text class="ink label" x="68" y="468">PPO agent</text><rect class="bar" x="260" y="450" width="347" height="28" rx="5"/><text class="ink value" x="619" y="470">15.78</text>
+  <text class="ink label" x="68" y="530">GRU</text><rect class="bar" x="260" y="512" width="379" height="28" rx="5"/><text class="ink value" x="651" y="532">17.23</text>
+  <text class="ink label" x="68" y="592">LSTM</text><rect class="bar" x="260" y="574" width="394" height="28" rx="5"/><text class="ink value" x="666" y="594">17.89</text>
+  <text class="ink label" x="68" y="654">Prophet</text><rect class="bar" x="260" y="636" width="443" height="28" rx="5"/><text class="ink value" x="715" y="656">20.15</text>
+  <text class="ink label" x="68" y="716">ARIMA</text><rect class="bar" x="260" y="698" width="494" height="28" rx="5"/><text class="ink value" x="766" y="718">22.47</text>
+
+  <rect class="panel" x="790" y="105" width="370" height="650" rx="12"/>
+  <text class="ink h2" x="818" y="140">ARDN — not rankable here</text>
+  <text class="muted small" x="818" y="164">Local results only; different targets and units</text>
+  <line class="grid" x1="818" y1="205" x2="1130" y2="205"/>
+  <text class="ink label" x="818" y="245">Trajectory MSE</text><text class="ink value" x="1060" y="245">0.0058</text>
+  <rect class="bar2" x="818" y="260" width="180" height="28" rx="5"/>
+  <text class="ink label" x="818" y="345">Recovery-time MAE</text><text class="ink value" x="1060" y="345">2.17</text>
+  <rect class="bar2" x="818" y="360" width="180" height="28" rx="5"/>
+  <text class="muted small" x="818" y="450">ARDN source: model/eval_output.txt</text>
+  <text class="muted small" x="818" y="478">The published study uses demand</text>
+  <text class="muted small" x="818" y="498">forecasting errors on its own dataset.</text>
+  <text class="muted small" x="818" y="540">A direct ARDN-vs-TFT/Informer result</text>
+  <text class="muted small" x="818" y="560">requires running those baselines on</text>
+  <text class="muted small" x="818" y="580">the ARDN evaluation data.</text>
+
+  <text class="muted small" x="48" y="802">Source: https://www.techscience.com/cmc/v88n3/68058.html (Table 3). Values are reported by the paper, not estimated.</text>
+  <text class="muted small" x="48" y="826">Caution: cross-paper comparisons are not valid unless dataset, target, split, horizon, and metric definitions match.</text>
+</svg>

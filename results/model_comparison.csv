@@ -1,0 +1,14 @@
+group,method,metric,value,unit,better,source,comparability
+prediction,ARDN,trajectory_mse,0.0058,MSE,lower,model/eval_output.txt,direct predictor comparison
+prediction,No-GAT ablation,trajectory_mse,0.0077,MSE,lower,model/eval_output.txt,direct predictor comparison
+prediction,ARDN,recovery_time_mae,2.17,steps,lower,model/eval_output.txt,direct predictor comparison
+prediction,Naive midpoint,recovery_time_mae,5.25,steps,lower,model/eval_output.txt,direct predictor comparison
+strategy,Classical rules,invalid_agreement_rate,0,rate,lower,backend/experiments.py seed=42,live strategy comparison
+strategy,Unverified agents,invalid_agreement_rate,1,rate,lower,backend/experiments.py seed=42,live strategy comparison
+strategy,Verified agents,invalid_agreement_rate,0,rate,lower,backend/experiments.py seed=42,live strategy comparison
+strategy,Classical rules,verifier_interventions,0,interventions,lower,backend/experiments.py seed=42,live strategy comparison
+strategy,Unverified agents,verifier_interventions,0,interventions,lower,backend/experiments.py seed=42,live strategy comparison
+strategy,Verified agents,verifier_interventions,4,interventions,context,backend/experiments.py seed=42,live strategy comparison
+strategy,Classical rules,negotiation_rounds,0,rounds,lower,backend/experiments.py seed=42,live strategy comparison
+strategy,Unverified agents,negotiation_rounds,1,rounds,context,backend/experiments.py seed=42,live strategy comparison
+strategy,Verified agents,negotiation_rounds,4,rounds,context,backend/experiments.py seed=42,live strategy comparison

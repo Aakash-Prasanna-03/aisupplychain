@@ -2,6 +2,7 @@ from .models import Agreement, Proposal
 from .agents import agent_proposal
 from .verifier import verify_agreement
 from .policies import classical_policy
+from .config import LLM_MODEL
 
 def build_agreement(proposals):
     chosen={}; production=[]
@@ -13,17 +14,19 @@ def build_agreement(proposals):
     return Agreement(shipments=[Shipment(**{"from":a,"to":b,"quantity":q}) for (a,b),q in chosen.items()],production=production)
 
 def negotiate(engine, verified=True):
-    feedback=None; log=[]; attempts=0
+    feedback=None; log=[]; attempts=0; used_mock=False
     for round_no in range(1,5):
         proposals=[]
         for name in ["supplier","manufacturer","distributor","retailer"]:
-            p, mocked=agent_proposal(name,engine,round_no,feedback); proposals.append(p)
+            p, mocked=agent_proposal(name,engine,round_no,feedback); used_mock = used_mock or mocked; proposals.append(p)
             log.append({"speaker":f"{name.title()} Agent" + (" (Mock)" if mocked else ""),"message":p.reason,"proposal":p.model_dump(by_alias=True)})
         agreement=build_agreement(proposals); result=verify_agreement(engine,agreement); attempts+=1
         log.append({"speaker":"Verifier","message":"AGREEMENT VERIFIED" if result.valid else " · ".join(v["constraint"] for v in result.violations),"valid":result.valid,"violations":result.violations})
         if not verified or result.valid:
-            return agreement,result,log,{"rounds":round_no,"attempts":attempts,"rejections":attempts-1,"status":"executed"}
+            engine.mock_agents=used_mock
+            return agreement,result,log,{"rounds":round_no,"attempts":attempts,"rejections":attempts-1,"status":"executed","agent_model":"mock" if used_mock else LLM_MODEL}
         feedback=result.violations
     agreement=classical_policy(engine); result=verify_agreement(engine,agreement)
     log.append({"speaker":"System","message":"Negotiation exhausted; classical emergency policy applied."})
-    return agreement,result,log,{"rounds":4,"attempts":attempts,"rejections":attempts,"status":"fallback"}
+    engine.mock_agents=used_mock
+    return agreement,result,log,{"rounds":4,"attempts":attempts,"rejections":attempts,"status":"fallback","agent_model":"mock" if used_mock else LLM_MODEL}
