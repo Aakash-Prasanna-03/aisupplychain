@@ -39,6 +39,13 @@ The six action types are `reallocate`, `reroute`, `delay`, `prioritize`, `share_
 - `simulator.py` — synthetic multi-echelon graph simulator and feature builder used to generate training episodes.
 - `model.py` — type-aware node encoders, FiLM-conditioned heterogeneous graph attention, GRU recovery dynamics, hazard head, evidential cost/fairness heads, risk head, and OOD scoring.
 - `train(1).py` — original training loop with horizon curriculum and multi-task losses.
+- `train.py` — import-safe shim around `train(1).py`.
+- `dataset.py` — fixed, reproducible dataset generation (train, val, test, 12/16-node topology transfer, severity buckets).
+- `baselines.py` — unified baseline models (Persistence, GlobalMean, FlatMLP, GNN, RandomForest, Oracle) exposing `.predict_unified()`.
+- `evaluate_all.py` — unified counterfactual tau ranking and top-1 accuracy routines.
+- `analyze.py` — paired bootstrap significance tests and confidence intervals.
+- `run_train.py` — model loader and caching orchestrator for diagnostics and benchmarks.
+- `diagnostics.py` — targeted diagnostics (per-timestep trajectory error and high-power counterfactual ranking).
 - `evaluate.py` — held-out quality, counterfactual action ranking, OOD, calibration, topology-transfer, and ablation checks.
 - `trained_model.pkl` — included trained weights, horizon, topology metadata, and OOD statistics.
 - `eval_output.txt` — captured output from the included evaluation run.

@@ -317,6 +317,7 @@ def make_episode(net=None, T=15, forced_action_type=None, rng=None):
         "d_vec": d_vec,
         "a_vec": a_vec,
         "hist": hist,
+        "disruption_severity": float(disruption["severity"]),
         **result,
     }
 

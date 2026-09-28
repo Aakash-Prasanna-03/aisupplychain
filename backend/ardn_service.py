@@ -24,6 +24,19 @@ ACTION_LABELS = {
     "share_capacity": "Share capacity",
     "emergency_source": "Use emergency source",
 }
+RUNTIME_TUNING = {
+    "forecast_horizon": 15,
+    "service_threshold": 0.9,
+    "cost_interval_multiplier": 1.0,
+    "recovery_weight": 1.0,
+    "cost_weight": 0.35,
+    "risk_weight": 0.75,
+    "service_loss_weight": 0.75,
+    "ood_weight": 0.35,
+    "risk_review_threshold": 0.6,
+    "ood_review_threshold": 15.0,
+    "enabled_actions": list(ACTION_LABELS),
+}
 DISRUPTION_TYPE_MAP = {
     "supplier_capacity_drop": "capacity",
     "route_closure": "transport",
@@ -123,10 +136,10 @@ def _number(tensor: Any) -> float:
     return float(tensor.data.reshape(-1)[0])
 
 
-def _cost_interval(cost: tuple[Any, Any, Any, Any]) -> tuple[float, float]:
+def _cost_interval(cost: tuple[Any, Any, Any, Any], multiplier: float = 1.0) -> tuple[float, float]:
     mu, v, alpha, beta = (_number(item) for item in cost)
     variance = beta / (v * (alpha - 1.0) + 1e-6)
-    sigma = max(variance, 1e-3) ** 0.5 * 20.0  # cost target was trained divided by 20
+    sigma = max(variance, 1e-3) ** 0.5 * 20.0 * multiplier  # cost target was trained divided by 20
     point = mu * 20.0
     return point - sigma, point + sigma
 
@@ -137,9 +150,11 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
         model, net, action_types = _load_ardn()
         forecasts = []
         for action_type in action_types:
+            if action_type not in RUNTIME_TUNING["enabled_actions"]:
+                continue
             episode = _episode_from_engine(engine, action_type, net)
             prediction = model.predict(episode)
-            lower, upper = _cost_interval(prediction["cost"])
+            lower, upper = _cost_interval(prediction["cost"], RUNTIME_TUNING["cost_interval_multiplier"])
             recovery_variance = max(0.0, _number(prediction["T_rec_var"]))
             trajectory = [round(float(step.data.mean()), 3) for step in prediction["s_hat_seq"]]
             forecasts.append({
@@ -154,15 +169,78 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
                 "trajectory": trajectory,
                 "ood_score": round(model.ood_score(episode), 2),
             })
-        forecasts.sort(key=lambda item: (item["recovery_days"], item["predicted_cost"]))
+        def scaled(item: dict[str, Any], key: str) -> float:
+            values = [entry[key] for entry in forecasts]
+            low, high = min(values), max(values)
+            return 0.0 if high == low else (item[key] - low) / (high - low)
+
+        for forecast in forecasts:
+            forecast["ranking_score"] = round(
+                RUNTIME_TUNING["recovery_weight"] * scaled(forecast, "recovery_days")
+                + RUNTIME_TUNING["cost_weight"] * scaled(forecast, "predicted_cost")
+                + RUNTIME_TUNING["risk_weight"] * scaled(forecast, "risk_probability")
+                + RUNTIME_TUNING["service_loss_weight"] * scaled(forecast, "service_loss")
+                + RUNTIME_TUNING["ood_weight"] * scaled(forecast, "ood_score"),
+                3,
+            )
+            forecast["review_flags"] = [
+                label for label, requires_review in {
+                    "Risk above review threshold": forecast["risk_probability"] >= RUNTIME_TUNING["risk_review_threshold"],
+                    "Novelty above review threshold": forecast["ood_score"] >= RUNTIME_TUNING["ood_review_threshold"],
+                }.items() if requires_review
+            ]
+        forecasts.sort(key=lambda item: (item["ranking_score"], item["recovery_days"], item["predicted_cost"]))
         recommended = forecasts[0]
         return {
             "status": "ready",
             "model": "ARDN",
             "horizon_days": model.horizon,
+            "runtime_tuning": RUNTIME_TUNING.copy(),
             "recommendation": recommended,
             "alternatives": forecasts,
             "note": "ARDN is an advisory forecast. The deterministic verifier remains the execution gate.",
         }
     except ARDNUnavailable as exc:
         return {"status": "unavailable", "model": "ARDN", "message": str(exc)}
+
+
+def ardn_configuration() -> dict[str, Any]:
+    """Expose the loaded model contract and active safe runtime controls."""
+    try:
+        model, _, _ = _load_ardn()
+        return {
+            "status": "ready",
+            "model": "ARDN",
+            "runtime_tuning": RUNTIME_TUNING.copy(),
+            "trained_horizon": 15,
+            "active_horizon": model.horizon,
+            "architecture": {
+                "node_feature_dimensions": 25,
+                "edge_feature_dimensions": 5,
+                "node_embedding_dimensions": 32,
+                "graph_attention_layers": 2,
+                "dynamics": "GRU rollout",
+                "uncertainty": "Normal-Inverse-Gamma evidential heads",
+                "ood": "Mahalanobis distance on graph embedding",
+            },
+            "captured_evaluation": {
+                "held_out_trajectory_mse": 0.0058,
+                "recovery_time_mae_steps": 2.17,
+                "naive_recovery_time_mae_steps": 5.25,
+                "mean_action_ranking_kendall_tau": 0.30,
+                "full_ardn_ablation_mse": 0.0153,
+                "no_gat_ablation_mse": 0.0077,
+            },
+            "note": "Runtime settings are applied to the active ARDN instance and new advisory forecasts. They do not overwrite trained_model.pkl.",
+        }
+    except ARDNUnavailable as exc:
+        return {"status": "unavailable", "model": "ARDN", "message": str(exc)}
+
+
+def update_ardn_runtime_tuning(tuning: Any) -> dict[str, Any]:
+    """Apply bounded settings without changing model weights or the artifact."""
+    model, _, _ = _load_ardn()
+    RUNTIME_TUNING.update(tuning.model_dump())
+    model.horizon = RUNTIME_TUNING["forecast_horizon"]
+    model.tau = RUNTIME_TUNING["service_threshold"]
+    return ardn_configuration()

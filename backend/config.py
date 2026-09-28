@@ -11,9 +11,9 @@ except ImportError:
 # OpenAI-compatible /chat/completions contract. A local Qwen server can be
 # used by pointing QWEN_BASE_URL at its compatible endpoint.
 LLM_ENABLED = os.getenv("LLM_ENABLED", "false").lower() == "true"
-LLM_API_KEY = os.getenv("QWEN_API_KEY", os.getenv("LLM_API_KEY", ""))
-LLM_BASE_URL = os.getenv("QWEN_BASE_URL", os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"))
-LLM_MODEL = os.getenv("QWEN_MODEL", os.getenv("LLM_MODEL", "qwen3.5-plus"))
+LLM_API_KEY = os.getenv("QWEN_API_KEY", os.getenv("LLM_API_KEY", "")).strip()
+LLM_BASE_URL = os.getenv("QWEN_BASE_URL", os.getenv("LLM_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")).strip()
+LLM_MODEL = os.getenv("QWEN_MODEL", os.getenv("LLM_MODEL", "qwen3.5-plus")).strip()
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))
 LLM_LOCAL_ENDPOINT = LLM_BASE_URL.startswith(("http://localhost", "http://127.0.0.1"))
 LLM_CONFIGURED = LLM_ENABLED and bool(LLM_API_KEY or LLM_LOCAL_ENDPOINT)

@@ -6,7 +6,7 @@ from .negotiation import negotiate
 from .verifier import verify_agreement
 
 def run_mode(req, mode):
-    e=SimulationEngine(req.seed,req.disruption); e.mode=mode; negotiation={"rounds":0,"attempts":0,"rejections":0,"status":"none"}; invalid=False
+    e=SimulationEngine(req.seed,req.disruption,req.network); e.mode=mode; negotiation={"rounds":0,"attempts":0,"rejections":0,"status":"none"}; invalid=False
     for _ in range(req.simulation_days):
         agreement=classical_policy(e)
         if e.day+1==req.disruption.start_day:

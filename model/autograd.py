@@ -286,8 +286,12 @@ class Tensor:
         out = Tensor(self.data[idx], _prev=(self,), name="getitem")
 
         def _backward():
+            # np.add.at (unbuffered) is REQUIRED here: `g[idx] += ...` silently keeps only
+            # the last write when idx contains repeated indices. The GAT layer indexes node
+            # embeddings by edge endpoints (H[dst], H[src]), where repeats are the norm, so
+            # the naive version under-counted gradients for every node with degree > 1.
             g = np.zeros_like(self.data)
-            g[idx] += out.grad
+            np.add.at(g, idx, out.grad)
             self.grad += g
 
         out._backward = _backward

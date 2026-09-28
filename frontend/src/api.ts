@@ -5,3 +5,5 @@ export function create(mode:string,disruption:Disruption){return request('/simul
 export function step(id:string){return request(`/simulation/${id}/step`,{method:'POST'});}
 export function negotiate(id:string){return request(`/simulation/${id}/negotiate`,{method:'POST'});}
 export function experiment(disruption:Disruption){return request('/experiment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'verified',disruption,simulation_days:12,seed:42})});}
+export function getArdnConfig(){return request('/ardn/config');}
+export function updateArdnConfig(tuning:Record<string,unknown>){return request('/ardn/config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(tuning)});}

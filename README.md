@@ -124,6 +124,8 @@ Do not commit `.env` or API keys. Hosted providers can have quotas or usage char
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/health` | Reports provider configuration and active agent model. |
+| `GET /api/ardn/config` | Returns ARDN architecture metadata, local evaluation summary, and active runtime settings. |
+| `PUT /api/ardn/config` | Updates bounded ARDN runtime forecast settings without changing weights. |
 | `POST /api/simulation` | Creates a simulation from a disruption request. |
 | `POST /api/simulation/{id}/step` | Advances one deterministic simulation day. |
 | `POST /api/simulation/{id}/negotiate` | Runs agent negotiation, verifier review, execution, and ARDN forecast. |
@@ -147,6 +149,7 @@ backend/
 frontend/src/
   App.tsx             Scenario workflow and dashboard composition
   components/         Controls, network, metrics, agents, verifier, forecast
+  components/ARDNLab.tsx  ARDN runtime tuning and model-evidence page
   style.css           Main responsive visual system
 
 model/

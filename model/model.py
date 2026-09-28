@@ -376,6 +376,33 @@ class ARDN:
         diff = z - self.ood_mean
         return float(np.sqrt(diff @ self.ood_cov_inv @ diff))
 
+    def predict_unified(self, ep, horizon=15):
+        """Unified prediction interface matching baselines:
+        returns traj_pooled, traj_node, T_rec, cost, fair, risk, z
+        """
+        orig_horizon = self.horizon
+        self.horizon = horizon
+        try:
+            pred = self.predict(ep)
+        finally:
+            self.horizon = orig_horizon
+        tn = np.concatenate([s.data for s in pred["s_hat_seq"]], axis=1).T[:horizon]
+        pooled = np.stack([tn.mean(axis=1), tn.min(axis=1)], axis=1)
+        trec = float(pred["T_rec"].data.reshape(-1)[0])
+        cost = float(pred["cost"][0].data.reshape(-1)[0])
+        fair = float(pred["fair"][0].data.reshape(-1)[0])
+        risk = float(pred["risk_p"].data.reshape(-1)[0])
+        z = self.zG_numpy(ep)
+        return {
+            "traj_pooled": pooled,
+            "traj_node": tn,
+            "T_rec": trec,
+            "cost": cost,
+            "fair": fair,
+            "risk": risk,
+            "z": z,
+        }
+
 
 def _broadcast_rows(t, n):
     """Repeats a (1,D) Tensor into (n,D) while keeping it differentiable

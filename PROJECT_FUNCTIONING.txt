@@ -71,6 +71,12 @@ model/
   autograd.py              Small NumPy reverse-mode autodiff implementation.
   train(1).py              Original ARDN training loop.
   train.py                 Import-safe shim around train(1).py.
+  dataset.py               Fixed reproducible dataset generator (train, val, test, transfer).
+  baselines.py             Unified benchmark baselines (Persistence, GlobalMean, FlatMLP, GNN, RandomForest, Oracle).
+  evaluate_all.py          Unified evaluation routines (counterfactual tau, top-1 action accuracy).
+  analyze.py               Paired bootstrap significance testing and statistical comparisons.
+  run_train.py             Model caching and training orchestrator.
+  diagnostics.py           Targeted diagnostics (per-timestep error accumulation, high-power CF ranking).
   evaluate.py              Held-out, ranking, OOD, calibration, topology, and
                            ablation evaluation routines.
   trained_model.pkl        Included serialized trained artifact.
@@ -356,6 +362,15 @@ API routes:
 
 GET /api/health
   Returns status, mock_agents, llm_enabled, and agent_model.
+
+GET /api/ardn/config
+  Returns active bounded ARDN runtime settings, fixed architecture metadata, and
+  the captured local evaluation summary. It does not train or alter the model.
+
+PUT /api/ardn/config
+  Body: forecast_horizon (4..15), service_threshold (.70...98), and
+  cost_interval_multiplier (.5..3.0). Applies settings to new advisory
+  forecasts in the current backend process. It does not overwrite trained_model.pkl.
 
 POST /api/simulation
   Body: SimulationRequest.
