@@ -188,3 +188,55 @@ The included model was trained on the synthetic ARDN simulator described in [mod
 - The UI shows `(Mock)`: Qwen is disabled, credentials are missing, the local server is unreachable, or the response was not valid proposal JSON.
 - `forecast.status` is `unavailable`: verify that `model\trained_model.pkl`, NumPy, and SciPy are present.
 - Ollama is not responding: run `ollama list`, then start Ollama or run `ollama serve`.
+
+## Natural-language disruption workflow
+
+The workspace now uses the scenario prompt as the primary way to define what happened. There is no disruption-type selector or Start Day control. Users can describe production failures, inventory damage, cyberattacks, strikes, transport events, demand changes, weather, or compound scenarios in ordinary language.
+
+The execution pipeline is:
+
+```text
+natural-language scenario
+  -> Gemini interpretation or local fallback
+  -> effect normalization and validation
+  -> deterministic simulation
+  -> four agent proposals
+  -> agreement construction
+  -> deterministic verifier
+  -> verified execution
+  -> ARDN advisory forecast
+```
+
+The interpreter converts events into operational effects that the existing simulator can execute. Supported effects are `capacity_reduction`, `inventory_loss`, `route_closure`, `throughput_reduction`, `demand_increase`, `demand_drop`, and `shipping_delay`. Semantic events such as a factory fire, cyberattack, flood, strike, or port closure are normalized into one or more of these effects rather than receiving separate mathematical simulators.
+
+Each effect must have a valid target or an adjacent source/destination route. Effect magnitudes are normalized to `0.0`–`1.0`, compound scenarios preserve separate effect magnitudes, and unsupported effect names are normalized with warnings. The interpretation response exposes:
+
+- `source`: `llm` or `fallback`;
+- `fallback_reason` when local parsing was required;
+- affected nodes and routes;
+- normalized operational effects and magnitudes;
+- inferred timing, duration, and severity.
+
+The fallback parser is intentionally safe and deterministic. It is not presented as Gemini: the UI labels the interpretation source and shows why fallback occurred. This is useful when the configured Gemini endpoint is unavailable or returns invalid JSON.
+
+### Universal experiment controls
+
+Advanced Controls configure how the experiment runs, not what happened:
+
+- severity: inferred or explicitly overridden from 10% to 100%;
+- disruption duration: automatic or an explicit 1–7 days;
+- simulation horizon: 4–14 total simulated days;
+- maximum negotiation rounds: 1–4 retry rounds;
+- recovery aggressiveness: conservative, balanced, or aggressive.
+
+Explicit controls override corresponding inferred values. Severity scaling is bounded and preserves relative effect magnitudes; it cannot create an effect above 100%. The simulation horizon is independent of disruption duration so recovery after the event can be observed.
+
+Recovery aggressiveness changes bounded fallback and agent recovery proposals, but all proposals still pass the same verifier. Maximum negotiation rounds is a ceiling, not a forced count; the results show actual rounds used and the configured maximum.
+
+### Interpretation, simulation, and analysis boundaries
+
+The LLM interprets the scenario and proposes agent actions. It does not execute shipments. The simulator calculates production, shipments, inventory, demand, service level, and cost. The deterministic verifier checks route validity, inventory, capacity, production, storage, service, and fairness constraints before verified execution. If negotiation exhausts its configured retries, the classical emergency policy remains the final fallback.
+
+ARDN remains advisory. It ranks recovery actions and predicts recovery time, cost, risk, service loss, uncertainty, and novelty/OOD signals. ARDN is trained on synthetic data and cannot approve or execute an agreement. The live adapter also exposes structured scenario features such as effect types, effect count, duration, inventory impact, transport impact, demand impact, capacity utilization, and current inventory. The trained artifact still uses its original feature contract, so richer fields are diagnostic/context features unless the model is retrained.
+
+The comparison experiment continues to run classical, unverified-agent, and verified-agent modes with the same scenario and seed. It reports recovery time, service loss, total cost, average service level, fairness variance, intervention/renegotiation count, negotiation rounds, and invalid-agreement rate.

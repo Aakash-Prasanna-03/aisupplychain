@@ -24,9 +24,52 @@ class Proposal(BaseModel):
 class Agreement(BaseModel):
     shipments: list[Shipment] = []; production: list[Production] = []; priority_allocations: dict[str, float] = {}
 
+class Route(BaseModel):
+    from_node: NodeId | None = Field(None, alias="from")
+    to_node: NodeId | None = Field(None, alias="to")
+    source: NodeId | None = None
+    destination: NodeId | None = None
+    class Config: populate_by_name = True
+
+    @model_validator(mode="after")
+    def normalize_names(self):
+        if self.from_node is None:
+            self.from_node = self.source
+        if self.to_node is None:
+            self.to_node = self.destination
+        if self.from_node is None or self.to_node is None:
+            raise ValueError("Route requires source/from and destination/to")
+        return self
+
+class DisruptionEffect(BaseModel):
+    type: str = Field(min_length=1, max_length=80)
+    target: NodeId | None = None
+    source: NodeId | None = None
+    destination: NodeId | None = None
+    magnitude: float = Field(.4, ge=0, le=1)
+    description: str = ""
+
 class Disruption(BaseModel):
-    type: Literal["supplier_capacity_drop", "route_closure", "demand_spike"] = "supplier_capacity_drop"
-    start_day: int = 5; duration: int = 5; severity: float = Field(.4, ge=0, le=1)
+    description: str = ""
+    affected_nodes: list[NodeId] = Field(default_factory=list)
+    affected_routes: list[Route] = Field(default_factory=list)
+    effects: list[DisruptionEffect] = Field(default_factory=list)
+    start_day: int = Field(1, ge=1, le=60)
+    duration: int = Field(5, ge=1, le=60)
+    severity: float = Field(.4, ge=0, le=1)
+    effect_scale: float = Field(1.0, ge=.1, le=10.0)
+    normalization_warnings: list[str] = Field(default_factory=list)
+
+class ExperimentConfig(BaseModel):
+    severity: int | None = Field(None, ge=10, le=100)
+    disruption_duration: int | None = Field(None, ge=1, le=7)
+    simulation_horizon: int = Field(12, ge=4, le=14)
+    max_negotiation_rounds: int = Field(4, ge=1, le=4)
+    recovery_aggressiveness: Literal["conservative", "balanced", "aggressive"] = "balanced"
+
+class ScenarioPromptRequest(BaseModel):
+    prompt: str = Field(min_length=3, max_length=1200)
+    experiment: ExperimentConfig = Field(default_factory=ExperimentConfig)
 
 NETWORK_ROLE_ALIASES = {
     "supplier": "supplier", "vendor": "supplier", "manufacturer": "manufacturer",
@@ -66,7 +109,8 @@ class NetworkImport(BaseModel):
 
 class SimulationRequest(BaseModel):
     seed: int = 42; mode: Literal["classical", "unverified", "verified"] = "verified"
-    disruption: Disruption = Disruption(); simulation_days: int = Field(12, ge=1, le=60)
+    disruption: Disruption = Field(default_factory=Disruption); simulation_days: int = Field(12, ge=1, le=60)
+    experiment: ExperimentConfig = Field(default_factory=ExperimentConfig)
     network: NetworkImport | None = None
 
 class VerificationResult(BaseModel):

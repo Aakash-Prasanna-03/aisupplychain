@@ -37,16 +37,35 @@ RUNTIME_TUNING = {
     "ood_review_threshold": 15.0,
     "enabled_actions": list(ACTION_LABELS),
 }
-DISRUPTION_TYPE_MAP = {
-    "supplier_capacity_drop": "capacity",
-    "route_closure": "transport",
-    "demand_spike": "demand",
-}
-DISRUPTION_TARGET = {
-    "supplier_capacity_drop": 0,
-    "route_closure": 1,
-    "demand_spike": 3,
-}
+def _ardn_profile(disruption: Any) -> tuple[str, int]:
+    """Project arbitrary operational effects onto ARDN's trained coarse inputs."""
+    kinds = {effect.type.lower().replace("-", "_") for effect in disruption.effects}
+    if any(kind in kinds for kind in {"demand_increase", "demand_spike", "demand_change"}):
+        return "demand", 3
+    if any(kind in kinds for kind in {"route_closure", "shipping_delay", "transport_disruption"}):
+        return "transport", 1
+    target = (disruption.affected_nodes or ["supplier"])[0]
+    return "capacity", {"supplier": 0, "manufacturer": 1, "distributor": 2, "retailer": 3}.get(target, 0)
+
+def _scenario_features(engine: Any) -> dict[str, Any]:
+    effects = engine.disruption.effects
+    def magnitude(kinds: set[str]) -> float:
+        return round(max((effect.magnitude for effect in effects if effect.type in kinds), default=0.0), 3)
+    return {
+        "affected_nodes": list(engine.disruption.affected_nodes),
+        "affected_routes": [{"source": route.from_node, "destination": route.to_node} for route in engine.disruption.affected_routes],
+        "effect_types": [effect.type for effect in effects],
+        "number_of_effects": len(effects),
+        "duration_days": engine.disruption.duration,
+        "severity": round(engine.disruption.severity, 3),
+        "inventory_impact": magnitude({"inventory_loss"}),
+        "transport_impact": magnitude({"route_closure", "shipping_delay"}),
+        "demand_impact": magnitude({"demand_increase", "demand_drop"}),
+        "capacity_impact": magnitude({"capacity_reduction", "throughput_reduction"}),
+        "service_level": round(float(engine.nodes["retailer"].service_level), 3),
+        "current_inventory": {key: round(float(node.inventory), 2) for key, node in engine.nodes.items()},
+        "capacity_utilization": {key: round(float(node.inventory / max(node.capacity, 1)), 3) for key, node in engine.nodes.items()},
+    }
 
 
 class ARDNUnavailable(RuntimeError):
@@ -85,7 +104,7 @@ def _episode_from_engine(engine: Any, action_type: str, net: tuple[Any, Any, Any
 
     node_types, edges, echelons = net
     disruption = engine.disruption
-    target = DISRUPTION_TARGET[disruption.type]
+    disruption_type, target = _ardn_profile(disruption)
     action = {
         "type": action_type,
         "source": max(0, target - 1),
@@ -97,7 +116,7 @@ def _episode_from_engine(engine: Any, action_type: str, net: tuple[Any, Any, Any
         "nodes": [target],
         "severity": float(disruption.severity),
         "duration": int(np.clip(disruption.duration, 2, 8)),
-        "type": DISRUPTION_TYPE_MAP[disruption.type],
+        "type": disruption_type,
         "cooccurrence": False,
     }
     sim = SupplyChainSim(node_types, edges, echelons, rng=np.random.default_rng(engine.seed))
@@ -129,6 +148,7 @@ def _episode_from_engine(engine: Any, action_type: str, net: tuple[Any, Any, Any
         "d_vec": d_vec,
         "a_vec": a_vec,
         "hist": sim.history_summary(),
+        "scenario_features": _scenario_features(engine),
     }
 
 
@@ -198,6 +218,7 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
             "runtime_tuning": RUNTIME_TUNING.copy(),
             "recommendation": recommended,
             "alternatives": forecasts,
+            "scenario_features": _scenario_features(engine),
             "note": "ARDN is an advisory forecast. The deterministic verifier remains the execution gate.",
         }
     except ARDNUnavailable as exc:

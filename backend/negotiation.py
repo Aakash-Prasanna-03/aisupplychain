@@ -24,7 +24,8 @@ def negotiate(engine, verified=True):
     feedback = None; log = []; attempts = 0; used_mock = False
     agents = ["supplier", "manufacturer", "distributor", "retailer"]
 
-    for round_no in range(1, 5):
+    max_rounds = engine.experiment.max_negotiation_rounds
+    for round_no in range(1, max_rounds + 1):
         proposals = [None] * len(agents)
 
         # ── Run all 4 agent calls in parallel (4× faster than sequential) ──
@@ -64,6 +65,7 @@ def negotiate(engine, verified=True):
             engine.mock_agents = used_mock
             return agreement, result, log, {
                 "rounds": round_no, "attempts": attempts,
+                "max_rounds": max_rounds,
                 "rejections": attempts - 1, "status": "executed",
                 "agent_model": "mock" if used_mock else LLM_MODEL
             }
@@ -75,7 +77,7 @@ def negotiate(engine, verified=True):
     log.append({"speaker": "System", "message": "Negotiation exhausted; classical emergency policy applied."})
     engine.mock_agents = used_mock
     return agreement, result, log, {
-        "rounds": 4, "attempts": attempts,
+        "rounds": max_rounds, "attempts": attempts, "max_rounds": max_rounds,
         "rejections": attempts, "status": "fallback",
         "agent_model": "mock" if used_mock else LLM_MODEL
     }

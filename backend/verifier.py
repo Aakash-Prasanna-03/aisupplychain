@@ -1,16 +1,20 @@
 from .models import Agreement, VerificationResult
 from .simulator import EDGES
+from .disruptions import effects
 from .config import MIN_SERVICE_LEVEL, FAIRNESS_THRESHOLD
 
 def verify_agreement(engine, agreement: Agreement) -> VerificationResult:
-    nodes=engine.nodes; violations=[]; balances={k:v.inventory for k,v in nodes.items()}; outgoing={k:0 for k in nodes}
+    nodes=engine.nodes; violations=[]; balances={k:v.inventory for k,v in nodes.items()}; outgoing={k:0 for k in nodes}; fx=effects(engine.disruption, engine.day + 1)
     for s in agreement.shipments:
         if s.from_node not in nodes or s.to not in nodes or (s.from_node,s.to) not in EDGES:
             violations.append({"constraint":"INVALID_ROUTE","message":f"Shipment {s.from_node} → {s.to} is not a network route"}); continue
+        if fx["route_closed"] or (s.from_node, s.to) in fx["closed_routes"]:
+            violations.append({"constraint":"DISRUPTED_ROUTE","message":f"Route {s.from_node} → {s.to} is disrupted by the scenario"})
         outgoing[s.from_node]+=s.quantity; balances[s.from_node]-=s.quantity; balances[s.to]+=s.quantity
     for p in agreement.production:
-        if p.quantity > nodes[p.node].production_capacity:
-            violations.append({"constraint":"PRODUCTION_LIMIT","message":f"{p.node} production limit is {nodes[p.node].production_capacity}"})
+        effective_limit=nodes[p.node].production_capacity * fx["capacity_factors"].get(p.node, 1) * fx["throughput_factors"].get(p.node, 1)
+        if p.quantity > effective_limit:
+            violations.append({"constraint":"PRODUCTION_LIMIT","message":f"{p.node} production limit is {effective_limit:.1f}"})
         balances[p.node]+=p.quantity
     for node,q in outgoing.items():
         if q > nodes[node].capacity:

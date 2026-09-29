@@ -16,8 +16,9 @@ def mock_proposal(name, engine, round_no, feedback=None):
     edge = {"supplier": ("supplier", "manufacturer"), "manufacturer": ("manufacturer", "distributor"),
             "distributor": ("distributor", "retailer"), "retailer": ("distributor", "retailer")}[name]
     source, dest = edge; available = engine.nodes[source].inventory
-    if name == "supplier": q = min(70 if round_no == 1 and not feedback else 48, max(0, available))
-    else: q = min(25, max(0, available))
+    intensity = {"conservative": .7, "balanced": 1.0, "aggressive": 1.3}[engine.experiment.recovery_aggressiveness]
+    if name == "supplier": q = min((70 if round_no == 1 and not feedback else 48) * intensity, max(0, available))
+    else: q = min(25 * intensity, max(0, available))
     objectives = {
         "supplier": "Protect upstream supply and recovery capacity.",
         "manufacturer": "Stabilize material flow into production.",
@@ -131,6 +132,10 @@ def agent_proposal(name, engine, round_no, feedback=None):
         f"You are the {name} supply-chain agent. "
         f"Local state: inventory={node.inventory}, capacity={node.capacity}, "
         f"production_capacity={node.production_capacity}. "
+        f"Scenario: {engine.disruption.description}. Effects={[(effect.type, effect.target, effect.magnitude) for effect in engine.disruption.effects]}. "
+        f"Affected nodes={engine.disruption.affected_nodes}. Routes={[(route.from_node, route.to_node) for route in engine.disruption.affected_routes]}. "
+        f"Duration={engine.disruption.duration} days. Severity={engine.disruption.severity:.0%}. "
+        f"Recovery aggressiveness={engine.experiment.recovery_aggressiveness}. "
         f"Round={round_no}. Verifier feedback={feedback or 'none'}. "
         "shipments must be a list of objects each with from, to, quantity (numbers). "
         "production must be an empty list unless you are the manufacturer. "

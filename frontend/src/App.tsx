@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {create, step, negotiate, experiment} from './api';
-import type {Disruption, State} from './types';
+import type {Disruption, State, ExperimentConfig} from './types';
 import Controls from './components/Controls';
 import Network from './components/Network';
 import NegotiationLog from './components/NegotiationLog';
@@ -20,7 +20,8 @@ import './ardn-lab.css';
 import './ardn-advanced.css';
 
 export default function App(){
-  const [d,setD]=useState<Disruption>({type:'supplier_capacity_drop',severity:.4,start_day:5,duration:5});
+  const [d,setD]=useState<Disruption>({description:'',affected_nodes:[],affected_routes:[],effects:[],severity:.4,start_day:1,duration:5});
+  const [experimentConfig,setExperimentConfig]=useState<ExperimentConfig>({severity:null,disruption_duration:null,simulation_horizon:12,max_negotiation_rounds:4,recovery_aggressiveness:'balanced'});
   const [state,setState]=useState<State|null>(null);
   const [results,setResults]=useState<any>();
   const [busy,setBusy]=useState(false);
@@ -29,10 +30,10 @@ export default function App(){
   async function run(){
     setBusy(true);setError('');
     try{
-      const sim=await create('verified',d); let current=sim;
-      for(let i=0;i<4;i++) current=await step(sim.id);
+      const sim=await create('verified',d,experimentConfig); let current=sim;
+      for(let i=0;i<experimentConfig.simulation_horizon-1;i++) current=await step(sim.id);
       current=await negotiate(sim.id); setState(current);
-      const exp=await experiment(d); setResults(exp.results);
+      const exp=await experiment(d,experimentConfig); setResults(exp.results);
     }catch(e){setError('We could not reach the local API. Start the backend on port 8000, then try again.');}
     finally{setBusy(false);}
   }
@@ -50,9 +51,9 @@ export default function App(){
       <div><p className="eyebrow">SUPPLY CHAIN RESILIENCE LAB</p><h1 id="page-title">Plan a safer recovery.</h1><p className="lede">Test disruption scenarios, negotiate a response, and see what the safety verifier allows before a plan reaches your network.</p></div>
       <div className="hero-note"><span className="hero-note-icon" aria-hidden="true">✓</span><p><strong>Protected decisions</strong><br/>Every negotiated plan is checked against operating constraints.</p></div>
     </section>
-    <Controls d={d} setD={setD} onRun={run} busy={busy}/>
+    <Controls d={d} setD={setD} experiment={experimentConfig} setExperiment={setExperimentConfig} onRun={run} busy={busy}/>
     <section id="workspace" className={'workspace '+(!isReady?'workspace-empty':'')} aria-label="Simulation workspace">
-      <div className="section-heading"><div><p className="eyebrow">LIVE WORKSPACE</p><h2>{isReady?'Recovery plan overview':'Your results will appear here'}</h2></div>{isReady&&<span className="run-state"><i aria-hidden="true"/> Scenario complete</span>}</div>
+      <div className="section-heading"><div><p className="eyebrow">LIVE WORKSPACE</p><h2>{isReady?'Recovery plan overview':'Your results will appear here'}</h2></div>{isReady&&<span className="run-state"><i aria-hidden="true"/> Scenario complete {state?.meta&&` · Negotiation ${state.meta.rounds}/${state.meta.max_rounds||experimentConfig.max_negotiation_rounds}`}</span>}</div>
       {!isReady?<div className="empty-state"><div className="empty-illustration" aria-hidden="true"><span>●</span><b>→</b><span>●</span><b>→</b><span>●</span></div><h3>Start with a disruption scenario</h3><p>Adjust the inputs above and run the simulation to inspect network health, the proposed agreement, and its safety review.</p></div>:<div className="dashboard-grid">
         <div className="network-card"><Network nodes={state?.nodes||[]}/></div>
         <Metrics state={state}/>
@@ -62,7 +63,7 @@ export default function App(){
         <div className="forecast-card"><RecoveryForecast forecast={state?.forecast}/></div>
       </div>}
     </section>
-    <Comparison results={results}/>
+    <Comparison results={results} horizon={experimentConfig.simulation_horizon}/>
     </>}
     <footer><span>Signal Chain · Decision sandbox</span><span>Results are simulated for research and planning.</span></footer>
   </main>

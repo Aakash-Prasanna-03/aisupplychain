@@ -1,7 +1,7 @@
 from __future__ import annotations
 import random
 from copy import deepcopy
-from .models import Node, Agreement, Disruption, ImportedNode
+from .models import Node, Agreement, Disruption, ImportedNode, ExperimentConfig
 from .disruptions import effects
 from .config import LLM_CONFIGURED, LLM_MODEL
 
@@ -35,22 +35,27 @@ def default_nodes(imported_nodes: list[ImportedNode] | None = None):
     return {node.id: node for node in nodes}
 
 class SimulationEngine:
-    def __init__(self, seed=42, disruption=None, network=None):
+    def __init__(self, seed=42, disruption=None, network=None, experiment=None):
         self.seed=seed; self.rng=random.Random(seed); self.nodes=default_nodes(network.nodes if network else None); self.day=0
         self.imported_network={"active":bool(network),"source_node_count":len(network.nodes) if network else 4,"aggregation":"tier totals" if network else "default network"}
         self.disruption=disruption or Disruption(); self.history=[]; self.total_cost=0.; self.demands=[]
+        self.experiment=experiment or ExperimentConfig()
         self.last_demand=20.; self.negotiation=[]; self.verification=None; self.mode="verified"; self.mock_agents=not LLM_CONFIGURED
     def snapshot(self):
-        return {"day":self.day,"nodes":[n.model_dump() for n in self.nodes.values()],"total_cost":round(self.total_cost,2),"history":self.history,"negotiation":self.negotiation,"verification":self.verification,"mode":self.mode,"mock_agents":self.mock_agents,"agent_model":"mock" if self.mock_agents else LLM_MODEL,"imported_network":self.imported_network}
+        return {"day":self.day,"nodes":[n.model_dump() for n in self.nodes.values()],"total_cost":round(self.total_cost,2),"history":self.history,"negotiation":self.negotiation,"verification":self.verification,"mode":self.mode,"mock_agents":self.mock_agents,"agent_model":"mock" if self.mock_agents else LLM_MODEL,"imported_network":self.imported_network,"scenario":self.disruption.model_dump(),"experiment":self.experiment.model_dump()}
     def step(self, agreement: Agreement|None=None):
         self.day += 1; fx=effects(self.disruption,self.day)
+        for node_id, loss in fx["inventory_losses"].items():
+            self.nodes[node_id].inventory = max(0, self.nodes[node_id].inventory * (1 - min(loss, 1)))
         supplier=self.nodes["supplier"]
-        supplier.inventory=min(supplier.capacity, supplier.inventory + min(supplier.production_capacity*fx["capacity_factor"], supplier.capacity-supplier.inventory))
+        supplier_factor=fx["capacity_factor"] * fx["capacity_factors"].get("supplier", 1) * fx["throughput_factors"].get("supplier", 1)
+        supplier.inventory=min(supplier.capacity, supplier.inventory + min(supplier.production_capacity*supplier_factor, supplier.capacity-supplier.inventory))
         if agreement:
             for p in agreement.production:
-                node=self.nodes[p.node]; node.inventory=min(node.capacity,node.inventory+p.quantity)
+                node=self.nodes[p.node]; factor=fx["capacity_factors"].get(p.node, 1) * fx["throughput_factors"].get(p.node, 1); node.inventory=min(node.capacity,node.inventory+min(p.quantity,node.production_capacity*factor))
             for s in agreement.shipments:
-                if (s.from_node,s.to) in EDGES and not (fx["route_closed"] and s.from_node=="supplier"):
+                route_closed=fx["route_closed"] or (s.from_node,s.to) in fx["closed_routes"]
+                if (s.from_node,s.to) in EDGES and not route_closed:
                     q=min(s.quantity,self.nodes[s.from_node].inventory,self.nodes[s.to].capacity-self.nodes[s.to].inventory)
                     self.nodes[s.from_node].inventory-=q; self.nodes[s.to].inventory+=q
         demand=round(20*fx["demand_factor"] + self.rng.randint(-2,2),1); self.demands.append(demand); self.last_demand=demand

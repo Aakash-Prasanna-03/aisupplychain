@@ -3,7 +3,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
-from .models import SimulationRequest, Disruption, ARDNRuntimeTuning
+from .models import SimulationRequest, Disruption, ARDNRuntimeTuning, ScenarioPromptRequest
 from .simulator import SimulationEngine
 from .policies import classical_policy
 from .negotiation import negotiate
@@ -11,8 +11,9 @@ from .experiments import run_experiment
 from .database import init_db,save_run
 from .ardn_service import forecast_for_engine, ardn_configuration, update_ardn_runtime_tuning
 from .config import LLM_CONFIGURED, LLM_MODEL
+from .scenario_parser import interpret_scenario, apply_experiment_config, resolved_experiment_config, normalize_disruption
 
-app=FastAPI(title="Trust-Verified Agentic Negotiation"); app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5173"],allow_methods=["*"],allow_headers=["*"])
+app=FastAPI(title="Trust-Verified Agentic Negotiation"); app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5173","http://localhost:5174"],allow_methods=["*"],allow_headers=["*"])
 runs={}
 @app.on_event("startup")
 def start(): init_db()
@@ -20,11 +21,17 @@ def start(): init_db()
 def health(): return {"status":"ok","mock_agents":not LLM_CONFIGURED,"llm_enabled":LLM_CONFIGURED,"agent_model":"mock" if not LLM_CONFIGURED else LLM_MODEL}
 @app.get("/api/ardn/config")
 def ardn_config(): return ardn_configuration()
+@app.post("/api/scenario/interpret")
+def interpret(req: ScenarioPromptRequest):
+    disruption, message, source, fallback_reason = interpret_scenario(req.prompt)
+    resolved = resolved_experiment_config(disruption, req.experiment)
+    disruption = apply_experiment_config(disruption, req.experiment)
+    return {"scenario": disruption.model_dump(), "disruption": disruption.model_dump(), "experiment": resolved.model_dump(), "message": message, "source": source, "fallback_reason": fallback_reason}
 @app.put("/api/ardn/config")
 def update_ardn_config(tuning:ARDNRuntimeTuning): return update_ardn_runtime_tuning(tuning)
 @app.post("/api/simulation")
 def create(req:SimulationRequest):
-    id=str(uuid4()); e=SimulationEngine(req.seed,req.disruption,req.network); e.mode=req.mode; runs[id]={"engine":e,"request":req}; return {"id":id,**e.snapshot()}
+    disruption=apply_experiment_config(normalize_disruption(req.disruption),req.experiment); e=SimulationEngine(req.seed,disruption,req.network,req.experiment); e.mode=req.mode; id=str(uuid4()); runs[id]={"engine":e,"request":req}; return {"id":id,**e.snapshot()}
 @app.get("/api/simulation/{id}")
 def get(id:str):
     if id not in runs: raise HTTPException(404,"Unknown simulation")
