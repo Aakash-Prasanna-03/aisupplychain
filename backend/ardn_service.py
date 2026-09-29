@@ -177,6 +177,17 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
             lower, upper = _cost_interval(prediction["cost"], RUNTIME_TUNING["cost_interval_multiplier"])
             recovery_variance = max(0.0, _number(prediction["T_rec_var"]))
             trajectory = [round(float(step.data.mean()), 3) for step in prediction["s_hat_seq"]]
+            risk_val = float(np.clip(_number(prediction["risk_p"]), 0.0, 1.0))
+            ood_val = round(model.ood_score(episode), 2)
+            ood_status = "In-Distribution (Typical)" if ood_val < 8.0 else ("Moderate Novelty" if ood_val <= 15.0 else "High Novelty (OOD Review Required)")
+            risk_label = "< 1% (Low severe-overflow risk)" if risk_val < 0.01 else f"{risk_val:.1%} (Backlog overflow risk)"
+
+            # Feasibility evaluation under active network
+            is_reroute = action_type == "reroute"
+            imported = getattr(engine, "imported_network", None)
+            has_alt_routes = (imported.get("source_node_count", 4) if isinstance(imported, dict) else 4) > 4
+            feasibility = "Requires Multi-Route" if (is_reroute and not has_alt_routes) else "Feasible"
+
             forecasts.append({
                 "action": action_type,
                 "label": ACTION_LABELS[action_type],
@@ -185,9 +196,13 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
                 "predicted_cost": round(_number(prediction["cost"][0]) * 20.0, 1),
                 "cost_interval": [round(lower, 1), round(upper, 1)],
                 "service_loss": round(max(0.0, _number(prediction["L_service"])), 3),
-                "risk_probability": round(float(np.clip(_number(prediction["risk_p"]), 0.0, 1.0)), 3),
+                "risk_probability": round(risk_val, 3),
+                "risk_label": risk_label,
                 "trajectory": trajectory,
-                "ood_score": round(model.ood_score(episode), 2),
+                "ood_score": ood_val,
+                "ood_status": ood_status,
+                "ood_threshold": 15.0,
+                "feasibility": feasibility,
             })
         def scaled(item: dict[str, Any], key: str) -> float:
             values = [entry[key] for entry in forecasts]
@@ -211,15 +226,20 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
             ]
         forecasts.sort(key=lambda item: (item["ranking_score"], item["recovery_days"], item["predicted_cost"]))
         recommended = forecasts[0]
+        rec_summary = (
+            f"Selected via multi-attribute decision criterion (ranking score {recommended['ranking_score']:.3f}). "
+            f"Balances rapid recovery ({recommended['recovery_days']} ± {recommended['recovery_uncertainty_days']} days) "
+            f"with low predicted service loss ({recommended['service_loss']:.3f}) and incremental cost (${recommended['predicted_cost']:.1f})."
+        )
         return {
             "status": "ready",
             "model": "ARDN",
             "horizon_days": model.horizon,
             "runtime_tuning": RUNTIME_TUNING.copy(),
-            "recommendation": recommended,
+            "recommendation": {**recommended, "rationale": rec_summary},
             "alternatives": forecasts,
             "scenario_features": _scenario_features(engine),
-            "note": "ARDN is an advisory forecast. The deterministic verifier remains the execution gate.",
+            "note": "ARDN is an advisory neural predictor evaluated over a 15-day planning horizon. Predictions do not grant execution authority. The deterministic verifier remains the mandatory execution gate.",
         }
     except ARDNUnavailable as exc:
         return {"status": "unavailable", "model": "ARDN", "message": str(exc)}

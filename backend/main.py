@@ -29,6 +29,46 @@ def interpret(req: ScenarioPromptRequest):
     return {"scenario": disruption.model_dump(), "disruption": disruption.model_dump(), "experiment": resolved.model_dump(), "message": message, "source": source, "fallback_reason": fallback_reason}
 @app.put("/api/ardn/config")
 def update_ardn_config(tuning:ARDNRuntimeTuning): return update_ardn_runtime_tuning(tuning)
+@app.post("/api/simulation/run")
+def run_full_simulation(req: SimulationRequest):
+    run_id = str(uuid4())
+    disruption = apply_experiment_config(normalize_disruption(req.disruption), req.experiment)
+    req.disruption = disruption
+
+    # 1. Run full 3-mode comparative experiment on identical seed & disruption
+    exp_results = run_experiment(req)
+    data = {"id": run_id, "results": exp_results}
+    save_run(run_id, data)
+
+    # 2. Extract verified run as the primary live workspace state
+    verified_data = exp_results["verified"]
+    verified_state = verified_data["state"]
+
+    # 3. Compute ARDN counterfactual forecast evaluated at disruption onset
+    engine_for_ardn = SimulationEngine(req.seed, disruption, req.network, req.experiment)
+    for _ in range(disruption.start_day - 1):
+        engine_for_ardn.step(classical_policy(engine_for_ardn))
+    forecast = forecast_for_engine(engine_for_ardn)
+
+    verified_state["forecast"] = forecast
+    verified_state["meta"] = verified_data["negotiation"]
+    verified_state["id"] = run_id
+
+    runs[run_id] = {
+        "engine": None,
+        "request": req,
+        "experiment": data,
+        "state": verified_state,
+        "forecast": forecast,
+    }
+
+    return {
+        "id": run_id,
+        "state": verified_state,
+        "experiment": data,
+        "forecast": forecast,
+    }
+
 @app.post("/api/simulation")
 def create(req:SimulationRequest):
     disruption=apply_experiment_config(normalize_disruption(req.disruption),req.experiment); e=SimulationEngine(req.seed,disruption,req.network,req.experiment); e.mode=req.mode; id=str(uuid4()); runs[id]={"engine":e,"request":req}; return {"id":id,**e.snapshot()}

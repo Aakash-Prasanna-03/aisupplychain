@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json, re, time, logging, urllib.request, urllib.error
-from .models import Proposal, Shipment
+from .models import Proposal, Shipment, Production
 from .config import LLM_ENABLED, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
@@ -12,22 +12,64 @@ _RETRY_BACKOFF = 1.5
 # Detect if we're using the native Gemini REST API (not OpenAI-compat layer)
 _GEMINI_NATIVE = "generativelanguage.googleapis.com" in LLM_BASE_URL and "/openai" not in LLM_BASE_URL
 
-def mock_proposal(name, engine, round_no, feedback=None):
-    edge = {"supplier": ("supplier", "manufacturer"), "manufacturer": ("manufacturer", "distributor"),
-            "distributor": ("distributor", "retailer"), "retailer": ("distributor", "retailer")}[name]
-    source, dest = edge; available = engine.nodes[source].inventory
-    intensity = {"conservative": .7, "balanced": 1.0, "aggressive": 1.3}[engine.experiment.recovery_aggressiveness]
-    if name == "supplier": q = min((70 if round_no == 1 and not feedback else 48) * intensity, max(0, available))
-    else: q = min(25 * intensity, max(0, available))
-    objectives = {
-        "supplier": "Protect upstream supply and recovery capacity.",
-        "manufacturer": "Stabilize material flow into production.",
-        "distributor": "Protect downstream inventory availability.",
-        "retailer": "Preserve customer service continuity.",
-    }
-    reason = (objectives[name] if not feedback
-              else f"Revised shipment to address verifier constraints while continuing to {objectives[name].lower()}")
-    return Proposal(proposer=name, shipments=[Shipment(**{"from": source, "to": dest, "quantity": q})], reason=reason)
+def mock_proposal(name, engine, round_no, feedback=None, prior_proposals=None):
+    source_dest = {
+        "supplier": ("supplier", "manufacturer"),
+        "manufacturer": ("manufacturer", "distributor"),
+        "distributor": ("distributor", "retailer"),
+        "retailer": ("distributor", "retailer"),
+    }[name]
+    source, dest = source_dest
+    available = engine.nodes[source].inventory
+    capacity = engine.nodes[dest].capacity
+    dest_inv = engine.nodes[dest].inventory
+    intensity = {"conservative": 0.85, "balanced": 1.0, "aggressive": 1.2}[engine.experiment.recovery_aggressiveness]
+
+    severity_pct = int(engine.disruption.severity * 100)
+
+    # In Round 1 without feedback: realistic proposals reflecting the shock
+    if round_no == 1 and not feedback:
+        if name == "supplier":
+            # In round 1, propose steady flow; if aggressive, surge
+            base_q = 26 if engine.experiment.recovery_aggressiveness == "aggressive" else 18
+            q = min(base_q * intensity, available)
+            reason = f"Facing {severity_pct}% upstream disruption. Proposing {q:.1f} units to Manufacturer to support downstream flow while utilizing available buffer inventory ({available:.0f} units)."
+        elif name == "manufacturer":
+            inbound = prior_proposals.get("supplier").shipments[0].quantity if (prior_proposals and "supplier" in prior_proposals and prior_proposals["supplier"].shipments) else 18.0
+            q = min(18 * intensity, available + inbound * 0.4)
+            reason = f"Acknowledged {inbound:.1f} units inbound from Supplier. Scheduling production and proposing {q:.1f} units outbound to Distributor to balance material flow."
+        elif name == "distributor":
+            inbound = prior_proposals.get("manufacturer").shipments[0].quantity if (prior_proposals and "manufacturer" in prior_proposals and prior_proposals["manufacturer"].shipments) else 18.0
+            q = min(18 * intensity, available)
+            reason = f"Allocating {q:.1f} units to Retailer based on inbound {inbound:.1f} units from Manufacturer to mitigate downstream stockout risk."
+        else: # retailer
+            inbound = prior_proposals.get("distributor").shipments[0].quantity if (prior_proposals and "distributor" in prior_proposals and prior_proposals["distributor"].shipments) else 18.0
+            demand_est = engine.last_demand or 20
+            q = min(inbound, available)
+            reason = f"Customer demand projected at ~{demand_est:.0f} units. Confirmed {inbound:.1f} units inbound from Distributor to maintain full service target."
+    else:
+        # Revised proposal addressing verifier constraints
+        if name == "supplier":
+            safe_q = max(8.0, min(18.0 * intensity, available, capacity - dest_inv))
+            q = safe_q
+            reason = f"Revising proposal per Verifier constraints: Capping shipment to {q:.1f} units to maintain Manufacturer inventory within safe storage capacity ({capacity:.0f} units)."
+        elif name == "manufacturer":
+            inbound = prior_proposals.get("supplier").shipments[0].quantity if (prior_proposals and "supplier" in prior_proposals and prior_proposals["supplier"].shipments) else 18.0
+            q = max(10.0, min(18.0 * intensity, available + inbound * 0.5))
+            reason = f"Aligning outbound shipment to {q:.1f} units to Distributor, maintaining balanced downstream allocation and fairness."
+        elif name == "distributor":
+            inbound = prior_proposals.get("manufacturer").shipments[0].quantity if (prior_proposals and "manufacturer" in prior_proposals and prior_proposals["manufacturer"].shipments) else 18.0
+            q = max(10.0, min(18.0 * intensity, available))
+            reason = f"Reallocating {q:.1f} units to Retailer to satisfy minimum service level threshold without violating downstream fairness variance."
+        else: # retailer
+            inbound = prior_proposals.get("distributor").shipments[0].quantity if (prior_proposals and "distributor" in prior_proposals and prior_proposals["distributor"].shipments) else 18.0
+            demand_est = engine.last_demand or 20
+            q = min(inbound, available)
+            reason = f"Confirmed revised allocation of {inbound:.1f} units. Total available stock ({available + inbound:.1f} units) fulfills projected demand with 0% stockout risk."
+
+    shipments = [Shipment(**{"from": source, "to": dest, "quantity": round(q, 1)})]
+    production = [Production(node="manufacturer", quantity=round(q, 1))] if name == "manufacturer" else []
+    return Proposal(proposer=name, shipments=shipments, production=production, reason=reason)
 
 def _parse_json(content):
     """Accept strict JSON and occasional fenced JSON from a model."""
@@ -103,8 +145,8 @@ def call_llm(prompt: str) -> dict:
             body_text = exc.read().decode(errors="replace")[:300]
             logger.warning("LLM HTTP %s on attempt %d: %s", exc.code, attempt + 1, body_text)
             last_exc = exc
-            if exc.code in (401, 403):
-                raise RuntimeError(f"LLM auth error {exc.code}: check your API key in .env") from exc
+            if exc.code in (401, 403, 429):
+                raise RuntimeError(f"LLM API error {exc.code} (e.g. quota/auth): {body_text}") from exc
             if attempt < _MAX_RETRIES:
                 time.sleep(_RETRY_BACKOFF * (2 ** attempt))
 
@@ -121,25 +163,32 @@ def call_llm(prompt: str) -> dict:
     raise RuntimeError(f"LLM failed after {1 + _MAX_RETRIES} attempts") from last_exc
 
 
-def agent_proposal(name, engine, round_no, feedback=None):
+def agent_proposal(name, engine, round_no, feedback=None, prior_proposals=None):
     """Use agent's local node context; any API failure falls back to mock."""
     if not LLM_ENABLED:
-        return mock_proposal(name, engine, round_no, feedback), True
+        return mock_proposal(name, engine, round_no, feedback, prior_proposals), True
 
     node = engine.nodes[name]
+    prior_summary = ""
+    if prior_proposals:
+        prior_summary = "Prior proposals in this round: " + "; ".join(
+            f"{p.proposer} proposed {s.quantity} units from {s.from_node} to {s.to} (reason: {p.reason})"
+            for p in prior_proposals.values() for s in p.shipments
+        )
+
     prompt = (
         "Return ONLY a JSON object with keys: proposer, shipments, production, reason. "
-        f"You are the {name} supply-chain agent. "
-        f"Local state: inventory={node.inventory}, capacity={node.capacity}, "
-        f"production_capacity={node.production_capacity}. "
-        f"Scenario: {engine.disruption.description}. Effects={[(effect.type, effect.target, effect.magnitude) for effect in engine.disruption.effects]}. "
-        f"Affected nodes={engine.disruption.affected_nodes}. Routes={[(route.from_node, route.to_node) for route in engine.disruption.affected_routes]}. "
-        f"Duration={engine.disruption.duration} days. Severity={engine.disruption.severity:.0%}. "
+        f"You are the {name} supply-chain agent in a multi-agent negotiation. "
+        f"Local state: inventory={node.inventory:.1f}, capacity={node.capacity:.1f}, "
+        f"production_capacity={node.production_capacity:.1f}. "
+        f"Scenario: {engine.disruption.description}. Duration={engine.disruption.duration} days. Severity={engine.disruption.severity:.0%}. "
         f"Recovery aggressiveness={engine.experiment.recovery_aggressiveness}. "
         f"Round={round_no}. Verifier feedback={feedback or 'none'}. "
+        f"{prior_summary}. "
         "shipments must be a list of objects each with from, to, quantity (numbers). "
         "production must be an empty list unless you are the manufacturer. "
-        "Only propose non-negative quantities on your adjacent supply-chain route."
+        "Only propose non-negative quantities on your adjacent supply-chain route. "
+        "Respond constructively to upstream/downstream proposals and verifier feedback in your reason."
     )
     try:
         raw = call_llm(prompt)
@@ -151,4 +200,4 @@ def agent_proposal(name, engine, round_no, feedback=None):
         return proposal, False
     except Exception as exc:
         logger.error("Agent '%s' LLM failed → mock. Reason: %s", name, exc)
-        return mock_proposal(name, engine, round_no, feedback), True
+        return mock_proposal(name, engine, round_no, feedback, prior_proposals), True

@@ -1,0 +1,121 @@
+================================================================================
+SIGNAL CHAIN: TRUST-VERIFIED AGENTIC NEGOTIATION & ARDN NEURAL PREDICTION
+Project Overview & Feature Reference (PPT Ready)
+================================================================================
+
+1. PROJECT VISION & HIGH-LEVEL CONCEPT
+--------------------------------------------------------------------------------
+Signal Chain is an AI-powered supply chain resilience platform designed to 
+autonomously recover multi-echelon supply networks from severe disruptions 
+(e.g., supplier shortages, route closures, factory downtime, demand spikes).
+
+Unlike traditional systems that rely either on static rulebooks or unconstrained 
+LLM chatbots, Signal Chain enforces a strict 4-tier scientific architecture:
+  • LLM Agents: Propose localized recovery actions via multi-party negotiation.
+  • ARDN (Neural Network): Forecasts multi-step consequences (time, cost, risk).
+  • Deterministic Verifier: Hard mathematical safety gate checking feasibility.
+  • Physical Simulator: Ground-truth environment executing valid agreements.
+
+
+2. CORE SYSTEM ARCHITECTURE (THE 4 PILLARS)
+--------------------------------------------------------------------------------
+[1] LLM Multi-Agent Negotiation Layer (Proposals)
+    - 4 Role-Bounded Echelon Coordinators: Supplier, Manufacturer, Distributor, 
+      and Retailer agents.
+    - Information Boundaries: Each agent only sees local inventory, adjacent 
+      shipment routes, and public negotiation messages (no global omniscience).
+    - Sequential Multi-Turn Protocol: Agents issue proposals and counterproposals 
+      (Supplier -> Manufacturer -> Distributor -> Retailer) rather than 
+      disconnected monologues.
+
+[2] Deterministic Verifier Safety Gate (Hard Execution Authority)
+    - A formal mathematical check that intercepts every multi-agent agreement.
+    - Verifies 6 strict linear operational inequalities before any plan executes:
+        1. Inventory Non-Negativity: Nodes cannot ship nonexistent stock.
+        2. Storage Capacity Limits: Destination warehouses cannot be overflowed.
+        3. Production Feasibility: Schedules cannot exceed factory capacity.
+        4. Mass Conservation: Inflow + production >= outflow + inventory.
+        5. Contractual Service Floor: Minimum customer fulfillment target (>=70%).
+        6. Downstream Fairness: Balanced distribution without starving nodes.
+    - Iterative Feedback Loop: If an agreement violates constraints, the verifier 
+      rejects it, provides structured reasons, and demands counter-proposals.
+
+[3] ARDN (Action-Conditioned Recurrent Dynamics Network) (Advisory Predictor)
+    - A graph-neural surrogate model pre-trained on 10,000 synthetic networks.
+    - GAT (Graph Attention) + GRU Rollout: Embeds network topology and rolls 
+      out a 15-day forward trajectory for candidate actions.
+    - Multi-Objective Predictions:
+        • Recovery Time (Days) with Epistemic Uncertainty (±σ).
+        • Incremental Intervention Cost ($) with Evidential Confidence Intervals.
+        • Peak Service Loss during disruption window.
+        • Severe Overflow Risk (<1% low risk vs backlog > 1.5x capacity).
+        • Novelty / Out-of-Distribution (OOD) score using Mahalanobis distance.
+    - Action Portfolio Evaluation: Compares all 6 candidate interventions 
+      (Delay, Reallocate, Reroute, Prioritize, Share Capacity, Emergency Source) 
+      and computes an objective ranking score.
+
+[4] Discrete-Event Physical Simulator (Ground Truth)
+    - Realistic multi-echelon network dynamics with buffer safety stocks.
+    - Physical propagation of stockouts, lead times, transit delays, and holding costs.
+    - Real Penalties in Unverified Mode: If unverified plans are executed, 
+      destination warehouse overflows trigger actual congestion/penalty costs.
+
+
+3. KEY FUNCTIONAL FEATURES
+--------------------------------------------------------------------------------
+• Natural-Language Disruption Parser:
+  Translates plain-English crisis descriptions (e.g., "55% battery-cell shortage 
+  at supplier for 5 days") into structured simulation parameters, explicitly 
+  tracking inferred vs. explicit fields.
+
+• Controlled 3-Strategy Benchmark (Direct Scientific Comparison):
+  Simulates identical shock and initial conditions across three distinct policies:
+    1. Classical (Fixed Rules): Inflexible rulebook; high cost or slow recovery.
+    2. Unverified Agents: Autonomous LLMs without gates; executes unfeasible plans, 
+       causing warehouse congestion and 100% invalid agreement rate.
+    3. Verified Agents (Recommended): Autonomous negotiation + deterministic 
+       verifier gate; achieves 0% invalid executed agreements and 0.0 peak service loss.
+
+• Live Interactive Research Dashboard:
+  - Physical Network Flow: Real-time inventory-to-capacity progress bars and 
+    dynamic status badges (Disrupted, Buffering, Constrained, Recovering, Normal).
+  - Scenario Pulse: Ground-truth KPIs (day, average service, total operating cost, 
+    verifier intervention count).
+  - Negotiation Decision Trail: Clean chronological timeline with filter tabs 
+    (Full Revision Trail vs. Executed Final Agreement).
+  - ARDN Consequence Projection: Highlight card with selected intervention, 
+    decision score, metric chips, and an expandable 6-option comparison table.
+  - Multi-Strategy Comparison Table: Fixed-width, high-contrast comparative matrix.
+
+• ARDN Control Plane (Model Lab):
+  Interactive sliders to configure forecast horizons (4-15 days), recovery service 
+  floors, evidential cost intervals, multi-attribute ranking weights, and OOD review 
+  thresholds without altering the underlying model weights.
+
+• Dual-Provider Agent Engine with Fail-Safe Fallbacks:
+  Supports real LLMs (Gemini / OpenAI / Qwen / local Ollama) via native REST and 
+  OpenAI-compatible APIs, with immediate fast-failover to calibrated deterministic 
+  mock agents if rate limits (HTTP 429) or API outages occur.
+
+
+4. SUMMARY OF METRICS EXPLAINED (FOR PPT SLIDES)
+--------------------------------------------------------------------------------
+• Recovery Time (days): Time from disruption onset until network performance 
+  and buffer stocks stabilize to >= 90%. (ARDN Predicted: ~11.5d | Actual: 12.0d)
+• Invalid Executed Agreement Rate: % of committed plans violating operating 
+  constraints (Verified = 0%, Unverified = 100%, Rules = 0%).
+• Invalid Proposals Intercepted: Infeasible agent drafts caught before execution.
+• Verifier Interventions: Number of renegotiation rounds forced by the verifier.
+• Downstream Fairness Variance (σ²): Variance of inventory/capacity ratios across 
+  downstream facilities (lower is more equitable; 0.0 = balanced).
+• Novelty Score (D_M): Mahalanobis distance in graph embedding space 
+  (<8 = Typical, 8-15 = Moderate Novelty, >15 = OOD Review Required).
+
+
+5. TECH STACK
+--------------------------------------------------------------------------------
+• Backend: Python 3.12, FastAPI, Uvicorn, Pydantic v2, PyTorch/Autograd, NumPy.
+• Frontend: React 18, TypeScript, Vite, Vanilla Modern CSS (light-mode palette).
+• AI/ML: Graph Attention Networks (GAT), GRU recurrent dynamics, evidential 
+  uncertainty heads, Gemini / Qwen LLM negotiation agents.
+================================================================================

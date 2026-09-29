@@ -8,6 +8,9 @@ class Node(BaseModel):
     id: NodeId; name: str; inventory: float; capacity: float; production_capacity: float = 0
     holding_cost: float = 0.2; shortage_cost: float = 4; service_level_target: float = .9
     service_level: float = 1; status: str = "NORMAL"
+    status_detail: str = "Operating within nominal limits"
+    fulfillment_rate: float = 1.0
+    buffer_days: float = 0.0
 
 class Shipment(BaseModel):
     from_node: NodeId = Field(alias="from")
@@ -16,7 +19,7 @@ class Shipment(BaseModel):
     class Config: populate_by_name = True
 
 class Production(BaseModel):
-    node: NodeId; quantity: float = Field(ge=0)
+    node: NodeId = "manufacturer"; quantity: float = Field(ge=0)
 
 class Proposal(BaseModel):
     proposer: NodeId; shipments: list[Shipment] = []; production: list[Production] = []; reason: str = ""
@@ -59,6 +62,7 @@ class Disruption(BaseModel):
     severity: float = Field(.4, ge=0, le=1)
     effect_scale: float = Field(1.0, ge=.1, le=10.0)
     normalization_warnings: list[str] = Field(default_factory=list)
+    inferred_fields: list[str] = Field(default_factory=list)
 
 class ExperimentConfig(BaseModel):
     severity: int | None = Field(None, ge=10, le=100)
@@ -115,6 +119,8 @@ class SimulationRequest(BaseModel):
 
 class VerificationResult(BaseModel):
     valid: bool; violations: list[dict] = []; projected_metrics: dict = {}
+    decision: str = "APPROVED"
+    audit_trail: list[dict] = []
 
 class ARDNRuntimeTuning(BaseModel):
     """Bounded controls applied to the active in-memory ARDN implementation."""
