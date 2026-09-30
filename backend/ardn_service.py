@@ -37,7 +37,7 @@ RUNTIME_TUNING = {
     "ood_review_threshold": 15.0,
     "enabled_actions": list(ACTION_LABELS),
 }
-def _ardn_profile(disruption: Any) -> tuple[str, int]:
+def _ardn_profile(disruption: Any, physical_nodes: list[Any] | None = None) -> tuple[str, int]:
     """Project arbitrary operational effects onto ARDN's trained coarse inputs."""
     kinds = {effect.type.lower().replace("-", "_") for effect in disruption.effects}
     if any(kind in kinds for kind in {"demand_increase", "demand_spike", "demand_change"}):
@@ -45,6 +45,9 @@ def _ardn_profile(disruption: Any) -> tuple[str, int]:
     if any(kind in kinds for kind in {"route_closure", "shipping_delay", "transport_disruption"}):
         return "transport", 1
     target = (disruption.affected_nodes or ["supplier"])[0]
+    physical_by_id = {node.id: node for node in (physical_nodes or []) if getattr(node, "id", None)}
+    if target in physical_by_id:
+        target = physical_by_id[target].operating_tier
     return "capacity", {"supplier": 0, "manufacturer": 1, "distributor": 2, "retailer": 3}.get(target, 0)
 
 def _scenario_features(engine: Any) -> dict[str, Any]:
@@ -104,7 +107,7 @@ def _episode_from_engine(engine: Any, action_type: str, net: tuple[Any, Any, Any
 
     node_types, edges, echelons = net
     disruption = engine.disruption
-    disruption_type, target = _ardn_profile(disruption)
+    disruption_type, target = _ardn_profile(disruption, getattr(engine, "physical_nodes", None))
     action = {
         "type": action_type,
         "source": max(0, target - 1),
@@ -128,14 +131,16 @@ def _episode_from_engine(engine: Any, action_type: str, net: tuple[Any, Any, Any
     sim.demand = np.full(4, max(float(engine.last_demand), 1.0))
     sim.unit_cost = np.array([node.holding_cost + node.shortage_cost / 4 for node in ordered_nodes], dtype=float)
     sim.contract_floor = np.array([node.service_level_target for node in ordered_nodes], dtype=float)
+    # The trained ``service`` feature is an operational/customer-fulfilment
+    # signal, not an inventory/capacity ratio.  Using stock fill here made a
+    # healthy but buffered upstream node look disrupted to ARDN.  Preserve
+    # the live engine's service signal for every tier; retailer service is the
+    # same customer-fulfilment metric used by the simulator comparison.
     sim.service = np.clip(
-        np.array([min(1.0, node.inventory / max(node.capacity, 1.0)) for node in ordered_nodes], dtype=float),
+        np.array([node.service_level for node in ordered_nodes], dtype=float),
         0.05,
         1.0,
     )
-    # Preserve the observed retailer service level, which is the live
-    # simulator's explicit service metric.
-    sim.service[-1] = float(np.clip(ordered_nodes[-1].service_level, 0.05, 1.0))
     sim.backlog = np.maximum(0.0, sim.demand * (1.0 - sim.service))
 
     edge_index, edge_feat = sim.build_edge_index_and_features()
@@ -161,7 +166,10 @@ def _cost_interval(cost: tuple[Any, Any, Any, Any], multiplier: float = 1.0) -> 
     variance = beta / (v * (alpha - 1.0) + 1e-6)
     sigma = max(variance, 1e-3) ** 0.5 * 20.0 * multiplier  # cost target was trained divided by 20
     point = mu * 20.0
-    return point - sigma, point + sigma
+    # Intervention costs cannot be negative; evidential intervals are
+    # symmetric in model space, so project the lower endpoint to the valid
+    # cost domain before exposing it to operators.
+    return max(0.0, point - sigma), max(0.0, point + sigma)
 
 
 def forecast_for_engine(engine: Any) -> dict[str, Any]:
@@ -177,10 +185,21 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
             lower, upper = _cost_interval(prediction["cost"], RUNTIME_TUNING["cost_interval_multiplier"])
             recovery_variance = max(0.0, _number(prediction["T_rec_var"]))
             trajectory = [round(float(step.data.mean()), 3) for step in prediction["s_hat_seq"]]
+            # Match the simulator's customer metric: maximum retailer
+            # fulfilment drop from 100%, rather than the model's original
+            # all-node deficit from the configurable 90% target.
+            active_window = max(1, min(int(engine.disruption.duration), len(prediction["s_hat_seq"])))
+            retailer_service_loss = max(
+                0.0,
+                1.0 - min(
+                    float(step.data.reshape(-1)[-1])
+                    for step in prediction["s_hat_seq"][:active_window]
+                ),
+            )
             risk_val = float(np.clip(_number(prediction["risk_p"]), 0.0, 1.0))
             ood_val = round(model.ood_score(episode), 2)
             ood_status = "In-Distribution (Typical)" if ood_val < 8.0 else ("Moderate Novelty" if ood_val <= 15.0 else "High Novelty (OOD Review Required)")
-            risk_label = "< 1% (Low severe-overflow risk)" if risk_val < 0.01 else f"{risk_val:.1%} (Backlog overflow risk)"
+            risk_label = "<1% — Low severe-overflow risk" if risk_val < 0.01 else f"{risk_val:.1%} — Backlog overflow risk"
 
             # Feasibility evaluation under active network
             is_reroute = action_type == "reroute"
@@ -192,10 +211,13 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
                 "action": action_type,
                 "label": ACTION_LABELS[action_type],
                 "recovery_days": round(max(0.0, _number(prediction["T_rec"])), 1),
+                "recovery_definition": "ARDN expected recovery step for all predicted nodes reaching the configured service threshold",
                 "recovery_uncertainty_days": round(recovery_variance ** 0.5, 1),
                 "predicted_cost": round(_number(prediction["cost"][0]) * 20.0, 1),
                 "cost_interval": [round(lower, 1), round(upper, 1)],
-                "service_loss": round(max(0.0, _number(prediction["L_service"])), 3),
+                "service_loss": round(retailer_service_loss, 3),
+                "service_loss_definition": "max(1 - predicted retailer fulfilment) during active disruption window",
+                "model_service_loss_functional": round(max(0.0, _number(prediction["L_service"])), 3),
                 "risk_probability": round(risk_val, 3),
                 "risk_label": risk_label,
                 "trajectory": trajectory,
@@ -225,7 +247,13 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
                 }.items() if requires_review
             ]
         forecasts.sort(key=lambda item: (item["ranking_score"], item["recovery_days"], item["predicted_cost"]))
-        recommended = forecasts[0]
+        eligible = [item for item in forecasts if item["ood_score"] < RUNTIME_TUNING["ood_review_threshold"]]
+        ood_review_required = not eligible
+        # Novelty is a recommendation gate. If all candidates are novel we
+        # retain the best advisory candidate, but explicitly block execution
+        # pending review instead of silently continuing.
+        recommended = min(eligible or forecasts, key=lambda item: (item["ranking_score"], item["recovery_days"], item["predicted_cost"]))
+        recommended = {**recommended, "execution_status": "review_required" if (ood_review_required or recommended["review_flags"]) else "advisory_ready"}
         rec_summary = (
             f"Selected via multi-attribute decision criterion (ranking score {recommended['ranking_score']:.3f}). "
             f"Balances rapid recovery ({recommended['recovery_days']} ± {recommended['recovery_uncertainty_days']} days) "
@@ -240,6 +268,13 @@ def forecast_for_engine(engine: Any) -> dict[str, Any]:
             "alternatives": forecasts,
             "scenario_features": _scenario_features(engine),
             "note": "ARDN is an advisory neural predictor evaluated over a 15-day planning horizon. Predictions do not grant execution authority. The deterministic verifier remains the mandatory execution gate.",
+            "comparison_contract": {
+                "service_loss": "retailer demand-fulfilment drop from 100%, max during active disruption window",
+                "simulator_peak_service_loss": "retailer demand-fulfilment drop from 100%, max during active disruption",
+                "recovery": "ARDN expected model recovery step versus simulator elapsed day to service recovery or buffer stabilization",
+                "ood_gate": "review_required when no candidate is below the configured novelty threshold",
+            },
+            "ood_review_required": ood_review_required,
         }
     except ARDNUnavailable as exc:
         return {"status": "unavailable", "model": "ARDN", "message": str(exc)}

@@ -86,12 +86,32 @@ export default function Comparison({ results, horizon = 12 }: { results: any; ho
         fontSize: '0.8rem',
         color: '#166534'
       }}>
-        <strong style={{ color: '#15803d', display: 'block', marginBottom: '2px' }}>
-          ✓ Explicit Recommendation Criterion: Verified Agents
-        </strong>
-        Verified Agents is recommended because it is the only strategy that achieves{' '}
-        <strong>0% invalid executed agreements</strong> while eliminating peak service loss (0.000) and preventing
-        unverified overflow penalties through deterministic constraint verification.
+        {(() => {
+          const metrics = ['recovery_time', 'peak_service_level_loss', 'total_cost'];
+          const values = metrics.flatMap(key => [
+            results.classical?.metrics?.[key],
+            results.unverified?.metrics?.[key],
+            results.verified?.metrics?.[key],
+          ]);
+          const dominatedByBuffer = values.length > 0 && metrics.every(key => {
+            const row = [results.classical?.metrics?.[key], results.unverified?.metrics?.[key], results.verified?.metrics?.[key]];
+            return row.every(value => value === row[0]);
+          });
+          return dominatedByBuffer ? <>
+            <strong style={{ color: '#0369a1', display: 'block', marginBottom: '2px' }}>
+              Buffer-dominated result: no measured outcome difference
+            </strong>
+            All three strategies produce the same recovery, service, and cost metrics for this scenario. The available
+            buffer inventory absorbs the disruption; Verified Agents still adds the deterministic safety gate, but the
+            current test does not exercise a differentiating constraint.
+          </> : <>
+            <strong style={{ color: '#15803d', display: 'block', marginBottom: '2px' }}>
+              ✓ Explicit Recommendation Criterion: Verified Agents
+            </strong>
+            Verified Agents is recommended because deterministic constraint verification protects execution safety while
+            the measured recovery and service outcomes remain competitive.
+          </>;
+        })()}
       </div>
 
       <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>

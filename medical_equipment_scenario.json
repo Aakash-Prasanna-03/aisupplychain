@@ -1,0 +1,26 @@
+{
+  "company": "CarePoint Medical Systems",
+  "description": "A port closure interrupts inbound medical-equipment transport and tests route verification and emergency allocation.",
+  "scenario": {
+    "description": "A port closure has interrupted the main inbound supply route for 5 days. Existing inventory can cover essential demand temporarily, but an alternate allocation plan is needed to avoid hospital supply shortages.",
+    "affected_nodes": ["M1", "D1"],
+    "affected_routes": [{"from":"supplier","to":"manufacturer"}],
+    "effects": [
+      {"type": "route_closure", "source":"supplier", "destination":"manufacturer", "magnitude":1.0, "description":"Main inbound supplier-to-manufacturer route is closed."},
+      {"type": "shipping_delay", "source":"supplier", "destination":"manufacturer", "magnitude":0.5, "description":"Remaining inbound shipments are delayed."}
+    ],
+    "start_day": 1,
+    "duration": 5,
+    "severity": 0.7,
+    "effect_scale": 1.0
+  },
+  "nodes": [
+    {"id":"MDS1","name":"Sterile Components Supplier","node_type":"supplier","inventory":300,"capacity":560,"production_capacity":170,"demand":0,"lead_time":3,"operating_cost":150,"holding_cost":0.18,"shortage_cost":8,"service_level_target":0.98},
+    {"id":"MDS2","name":"Emergency Components Supplier","node_type":"supplier","inventory":250,"capacity":480,"production_capacity":140,"demand":0,"lead_time":5,"operating_cost":165,"holding_cost":0.18,"shortage_cost":8,"service_level_target":0.98},
+    {"id":"M1","name":"Device Manufacturing Plant","node_type":"manufacturer","inventory":230,"capacity":460,"production_capacity":125,"demand":0,"lead_time":2,"operating_cost":260,"holding_cost":0.35,"shortage_cost":9,"service_level_target":0.98},
+    {"id":"M2","name":"Emergency Device Plant","node_type":"manufacturer","inventory":190,"capacity":400,"production_capacity":105,"demand":0,"lead_time":2,"operating_cost":280,"holding_cost":0.35,"shortage_cost":9,"service_level_target":0.98},
+    {"id":"D1","name":"National Medical Warehouse","node_type":"distributor","inventory":260,"capacity":520,"production_capacity":0,"demand":0,"lead_time":1,"operating_cost":115,"holding_cost":0.22,"shortage_cost":8,"service_level_target":0.98},
+    {"id":"D2","name":"Regional Hospital Warehouse","node_type":"distributor","inventory":210,"capacity":440,"production_capacity":0,"demand":0,"lead_time":1,"operating_cost":120,"holding_cost":0.22,"shortage_cost":8,"service_level_target":0.98},
+    {"id":"R1","name":"Hospital Care Network","node_type":"retailer","inventory":220,"capacity":400,"production_capacity":0,"demand":20,"lead_time":1,"operating_cost":85,"holding_cost":0.4,"shortage_cost":18,"service_level_target":0.98}
+  ]
+}

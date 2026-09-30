@@ -20,15 +20,16 @@ function canonicalTier(t: string): string {
 }
 
 const DEFAULT_NODE = (): ImportedNode => ({
-  name:'', node_type:'supplier', inventory:100, capacity:200,
-  production_capacity:50, holding_cost:0.2, shortage_cost:4, service_level_target:0.9,
+  id:'', name:'', node_type:'supplier', inventory:100, capacity:200,
+  production_capacity:50, demand:0, lead_time:0, operating_cost:0,
+  holding_cost:0.2, shortage_cost:4, service_level_target:0.9,
 });
 
-const TEMPLATE_CSV = `name,node_type,inventory,capacity,production_capacity,holding_cost,shortage_cost,service_level_target
-Raw Materials Supplier,supplier,500,800,300,0.15,5.00,0.95
-Assembly Plant,manufacturer,300,600,250,0.35,6.00,0.95
-Regional DC,distributor,200,400,0,0.25,5.00,0.95
-Retail Network,retailer,150,300,0,0.40,12.00,0.98`;
+const TEMPLATE_CSV = `id,name,node_type,inventory,capacity,production_capacity,demand,lead_time,operating_cost,holding_cost,shortage_cost,service_level_target
+S1,Raw Materials Supplier,supplier,500,800,300,0,3,120,0.15,5.00,0.95
+M1,Assembly Plant,manufacturer,300,600,250,0,2,220,0.35,6.00,0.95
+D1,Regional DC,distributor,200,400,0,1000,1,90,0.25,5.00,0.95
+R1,Retail Network,retailer,150,300,0,950,1,60,0.40,12.00,0.98`;
 
 interface Props {
   network: NetworkImport | null;
@@ -89,11 +90,15 @@ export default function NetworkImportPanel({network, onChange}: Props) {
       const row: any = {};
       headers.forEach((h, i) => row[h] = vals[i] ?? '');
       return {
+        id: row.id || undefined,
         name: row.name ?? '',
         node_type: (row.node_type ?? 'supplier') as ImportedNode['node_type'],
         inventory: parseFloat(row.inventory) || 0,
         capacity: parseFloat(row.capacity) || 0,
-        production_capacity: parseFloat(row.production_capacity) || 0,
+        production_capacity: row.production_capacity === '' || row.production_capacity == null ? undefined : parseFloat(row.production_capacity),
+        demand: row.demand === '' || row.demand == null ? undefined : parseFloat(row.demand),
+        lead_time: row.lead_time === '' || row.lead_time == null ? undefined : parseFloat(row.lead_time),
+        operating_cost: row.operating_cost === '' || row.operating_cost == null ? undefined : parseFloat(row.operating_cost),
         holding_cost: parseFloat(row.holding_cost) || 0.2,
         shortage_cost: parseFloat(row.shortage_cost) || 4,
         service_level_target: parseFloat(row.service_level_target) || 0.9,
@@ -155,10 +160,10 @@ export default function NetworkImportPanel({network, onChange}: Props) {
     const blob = fmt === 'csv'
       ? new Blob([TEMPLATE_CSV], {type:'text/csv'})
       : new Blob([JSON.stringify({nodes:[
-          {name:'Raw Materials Supplier',node_type:'supplier',inventory:500,capacity:800,production_capacity:300,holding_cost:0.15,shortage_cost:5,service_level_target:0.95},
-          {name:'Assembly Plant',node_type:'manufacturer',inventory:300,capacity:600,production_capacity:250,holding_cost:0.35,shortage_cost:6,service_level_target:0.95},
-          {name:'Regional DC',node_type:'distributor',inventory:200,capacity:400,production_capacity:0,holding_cost:0.25,shortage_cost:5,service_level_target:0.95},
-          {name:'Retail Network',node_type:'retailer',inventory:150,capacity:300,production_capacity:0,holding_cost:0.40,shortage_cost:12,service_level_target:0.98},
+          {id:'S1',name:'Raw Materials Supplier',node_type:'supplier',inventory:500,capacity:800,production_capacity:300,demand:0,lead_time:3,operating_cost:120,holding_cost:0.15,shortage_cost:5,service_level_target:0.95},
+          {id:'M1',name:'Assembly Plant',node_type:'manufacturer',inventory:300,capacity:600,production_capacity:250,demand:0,lead_time:2,operating_cost:220,holding_cost:0.35,shortage_cost:6,service_level_target:0.95},
+          {id:'D1',name:'Regional DC',node_type:'distributor',inventory:200,capacity:400,production_capacity:0,demand:1000,lead_time:1,operating_cost:90,holding_cost:0.25,shortage_cost:5,service_level_target:0.95},
+          {id:'R1',name:'Retail Network',node_type:'retailer',inventory:150,capacity:300,production_capacity:0,demand:950,lead_time:1,operating_cost:60,holding_cost:0.40,shortage_cost:12,service_level_target:0.98},
         ]},null,2)], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -243,7 +248,7 @@ export default function NetworkImportPanel({network, onChange}: Props) {
                       <span className="ni-node-dot" style={{background: TIER_COLORS[canonicalTier(n.node_type)] ?? '#999'}}/>
                       <div className="ni-node-info">
                         <strong>{n.name || <em>Unnamed</em>}</strong>
-                        <small>{n.node_type} · inv {n.inventory} · cap {n.capacity} · hold ${n.holding_cost}/u · short ${n.shortage_cost}/u</small>
+                        <small>{n.id || 'ID inferred'} · {n.node_type} · inv {n.inventory} · cap {n.capacity} · hold ${n.holding_cost}/u · short ${n.shortage_cost}/u</small>
                       </div>
                       <div className="ni-node-actions">
                         <button className="ni-action-btn" onClick={() => startEdit(i)}>Edit</button>
@@ -268,6 +273,10 @@ export default function NetworkImportPanel({network, onChange}: Props) {
                   </div>
                   <div className="ni-form-grid">
                     <div className="ni-form-field ni-form-field--wide">
+                      <label>Physical node ID</label>
+                      <input type="text" value={editNode.id ?? ''} onChange={e => setEditNode({...editNode, id:e.target.value || undefined})} placeholder="e.g. S1"/>
+                    </div>
+                    <div className="ni-form-field ni-form-field--wide">
                       <label>Node name</label>
                       <input type="text" value={editNode.name} onChange={e => setEditNode({...editNode, name:e.target.value})} placeholder="e.g. Main Assembly Plant"/>
                     </div>
@@ -289,7 +298,19 @@ export default function NetworkImportPanel({network, onChange}: Props) {
                     </div>
                     <div className="ni-form-field">
                       <label>Production capacity</label>
-                      <input type="number" min="0" value={editNode.production_capacity} onChange={e => setEditNode({...editNode, production_capacity:+e.target.value})}/>
+                      <input type="number" min="0" value={editNode.production_capacity ?? ''} onChange={e => setEditNode({...editNode, production_capacity:e.target.value === '' ? undefined : +e.target.value})}/>
+                    </div>
+                    <div className="ni-form-field">
+                      <label>Demand (units/day)</label>
+                      <input type="number" min="0" value={editNode.demand ?? ''} onChange={e => setEditNode({...editNode, demand:e.target.value === '' ? undefined : +e.target.value})}/>
+                    </div>
+                    <div className="ni-form-field">
+                      <label>Lead time (days)</label>
+                      <input type="number" min="0" value={editNode.lead_time ?? ''} onChange={e => setEditNode({...editNode, lead_time:e.target.value === '' ? undefined : +e.target.value})}/>
+                    </div>
+                    <div className="ni-form-field">
+                      <label>Operating cost ($/day)</label>
+                      <input type="number" min="0" value={editNode.operating_cost ?? ''} onChange={e => setEditNode({...editNode, operating_cost:e.target.value === '' ? undefined : +e.target.value})}/>
                     </div>
                     <div className="ni-form-field">
                       <label>Holding cost ($/unit/day)</label>

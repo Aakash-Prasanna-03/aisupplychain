@@ -1,6 +1,7 @@
 import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from uuid import uuid4
 from .models import SimulationRequest, Disruption, ARDNRuntimeTuning, ScenarioPromptRequest
@@ -12,6 +13,7 @@ from .database import init_db,save_run
 from .ardn_service import forecast_for_engine, ardn_configuration, update_ardn_runtime_tuning
 from .config import LLM_CONFIGURED, LLM_MODEL
 from .scenario_parser import interpret_scenario, apply_experiment_config, resolved_experiment_config, normalize_disruption
+from .reporting import create_run_report
 
 app=FastAPI(title="Trust-Verified Agentic Negotiation"); app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:5173","http://localhost:5174"],allow_methods=["*"],allow_headers=["*"])
 runs={}
@@ -97,3 +99,9 @@ def experiment(req:SimulationRequest):
 def get_experiment(id:str): return runs[id]["experiment"]
 @app.get("/api/experiment/{id}/comparison")
 def comparison(id:str): return {k:v["metrics"] for k,v in runs[id]["experiment"]["results"].items()}
+@app.get("/api/simulation/{id}/report")
+def report(id: str):
+    if id not in runs or "state" not in runs[id]:
+        raise HTTPException(404, "Completed simulation report unavailable")
+    output = create_run_report(id, runs[id])
+    return FileResponse(output, media_type="application/pdf", filename=f"recovery-report-{id}.pdf")

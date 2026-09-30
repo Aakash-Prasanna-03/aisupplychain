@@ -4,7 +4,7 @@ from .disruptions import effects
 from .config import MIN_SERVICE_LEVEL, FAIRNESS_THRESHOLD
 
 def verify_agreement(engine, agreement: Agreement) -> VerificationResult:
-    nodes=engine.nodes; violations=[]; balances={k:v.inventory for k,v in nodes.items()}; outgoing={k:0 for k in nodes}; fx=effects(engine.disruption, engine.day + 1)
+    nodes=engine.nodes; violations=[]; balances={k:v.inventory for k,v in nodes.items()}; outgoing={k:0 for k in nodes}; fx=effects(engine.disruption, engine.day + 1, getattr(engine, "physical_nodes", None))
     for s in agreement.shipments:
         if s.from_node not in nodes or s.to not in nodes or (s.from_node,s.to) not in EDGES:
             violations.append({"constraint":"INVALID_ROUTE","message":f"Shipment {s.from_node} → {s.to} is not a network route"}); continue

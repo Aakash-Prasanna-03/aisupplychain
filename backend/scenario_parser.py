@@ -20,6 +20,7 @@ def _number(value: str) -> int:
 
 def _fallback(prompt: str) -> Disruption:
     text = prompt.lower()
+    physical_ids = [value.upper() for value in re.findall(r"\b[A-Z]{1,4}\d+\b", prompt)]
     nodes = []
     for node, words in {
         "supplier": ("supplier", "vendor", "raw material"),
@@ -30,6 +31,7 @@ def _fallback(prompt: str) -> Disruption:
         if any(word in text for word in words):
             nodes.append(node)
     target = nodes[0] if nodes else "supplier"
+    physical_target = physical_ids[0] if physical_ids else target
     explicit_percentages = [float(value) / 100 for value in re.findall(r"(\d{1,3}(?:\.\d+)?)\s*(?:%|percent)", text)]
     magnitude = max(explicit_percentages) if explicit_percentages else next((value for word, value in SEVERITY_WORDS.items() if word in text), .4)
     number = r"\d{1,2}(?:st|nd|rd|th)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
@@ -52,16 +54,16 @@ def _fallback(prompt: str) -> Disruption:
         routes.append(Route(**{"from": route_source, "to": route_destination}))
         nodes.extend([route_source, route_destination])
     if any(word in text for word in ("inventory", "stock", "flood", "damaged", "damage")) and target in {"distributor", "retailer", "supplier", "manufacturer"}:
-        effects.append(DisruptionEffect(type="inventory_loss", target=target, magnitude=explicit_percentages[0] if explicit_percentages else magnitude, description="Inventory damage"))
+        effects.append(DisruptionEffect(type="inventory_loss", target=physical_target, magnitude=explicit_percentages[0] if explicit_percentages else magnitude, description="Inventory damage"))
     if any(word in text for word in ("demand", "orders", "customers", "sales", "promotion", "surge", "spike", "increase")):
         effects.append(DisruptionEffect(type="demand_increase", target="retailer", magnitude=explicit_percentages[-1] if explicit_percentages else magnitude, description="Demand increase"))
     if any(word in text for word in ("cyber", "warehouse system", "erp", "handling", "slow", "technology")):
-        effects.append(DisruptionEffect(type="throughput_reduction", target=target, magnitude=explicit_percentages[-1] if explicit_percentages else magnitude, description="Operational throughput reduction"))
+        effects.append(DisruptionEffect(type="throughput_reduction", target=physical_target, magnitude=explicit_percentages[-1] if explicit_percentages else magnitude, description="Operational throughput reduction"))
     if any(word in text for word in ("factory", "production", "machine", "equipment", "manufacturing", "fire", "labor strike", "energy", "contamination")) and not any(effect.type == "inventory_loss" for effect in effects):
-        effects.append(DisruptionEffect(type="capacity_reduction", target=target, magnitude=explicit_percentages[0] if explicit_percentages else magnitude, description="Production capacity reduction"))
+        effects.append(DisruptionEffect(type="capacity_reduction", target=physical_target, magnitude=explicit_percentages[0] if explicit_percentages else magnitude, description="Production capacity reduction"))
     if not effects:
-        effects.append(DisruptionEffect(type="capacity_reduction", target=target, magnitude=magnitude, description="Operational capacity reduction"))
-    return Disruption(description=prompt, affected_nodes=list(dict.fromkeys(nodes or [target])), affected_routes=routes, effects=effects, start_day=max(1, min(start_day, 60)), duration=max(1, min(duration, 60)), severity=max(0, min(magnitude, 1)))
+        effects.append(DisruptionEffect(type="capacity_reduction", target=physical_target, magnitude=magnitude, description="Operational capacity reduction"))
+    return Disruption(description=prompt, affected_nodes=list(dict.fromkeys((nodes or [target]) + physical_ids)), affected_routes=routes, effects=effects, start_day=max(1, min(start_day, 60)), duration=max(1, min(duration, 60)), severity=max(0, min(magnitude, 1)))
 
 
 def normalize_disruption(disruption: Disruption) -> Disruption:
@@ -119,7 +121,7 @@ def interpret_scenario(prompt: str, config: ExperimentConfig | None = None) -> t
     if LLM_CONFIGURED:
         instruction = (
             "Interpret this arbitrary supply-chain scenario. Return ONLY valid JSON with keys: description, affected_nodes, affected_routes, effects, start_day, duration, severity. "
-            "affected_nodes must use supplier, manufacturer, distributor, retailer. affected_routes contain from and to. "
+            "affected_nodes may use supplier, manufacturer, distributor, retailer, or physical IDs such as S1/M1 when present in the scenario. Preserve physical IDs exactly. affected_routes contain from and to. "
             "effects is an array; each effect has type, optional target/source/destination, magnitude from 0 to 1, and description. "
             "Use operational effects such as capacity_reduction, inventory_loss, route_closure, demand_increase, demand_drop, throughput_reduction, storage_reduction, or shipping_delay. "
             "Represent every simultaneous event instead of rejecting unusual wording. Infer start_day=1 and duration=5 when omitted. "

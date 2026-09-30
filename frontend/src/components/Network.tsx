@@ -1,17 +1,22 @@
 import React from 'react';
 import type { Node } from '../types';
 
-export default function Network({ nodes }: { nodes: Node[] }) {
+export default function Network({ nodes, isDisruptionActive = false, networkStatus }: { nodes: Node[]; isDisruptionActive?: boolean; networkStatus?: string }) {
   const anyDisrupted = nodes.some(n => n.status === 'DISRUPTED' || n.status === 'CONSTRAINED');
   const anyBuffering = nodes.some(n => n.status === 'BUFFERING');
   const anyRecovering = nodes.some(n => n.status === 'RECOVERING');
 
-  let networkStatusText = 'Operating Normally';
+  let networkStatusText = networkStatus || 'Operating Normally';
   let badgeBg = '#dcfce7';
   let badgeColor = '#15803d';
   let badgeBorder = '#86efac';
 
-  if (anyDisrupted) {
+  if (isDisruptionActive) {
+    networkStatusText = networkStatus || (anyDisrupted ? 'Active Disruption' : 'Active Disruption (Buffer Protected)');
+    badgeBg = anyDisrupted ? '#fee2e2' : '#e0f2fe';
+    badgeColor = anyDisrupted ? '#b91c1c' : '#0369a1';
+    badgeBorder = anyDisrupted ? '#fca5a5' : '#7dd3fc';
+  } else if (anyDisrupted) {
     networkStatusText = 'Active Upstream Disruption';
     badgeBg = '#fee2e2';
     badgeColor = '#b91c1c';

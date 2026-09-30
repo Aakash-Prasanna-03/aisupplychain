@@ -100,7 +100,7 @@ export default function RecoveryForecast({ forecast }: { forecast: Forecast | un
           <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1d4ed8' }}>
             {r.recovery_days} <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#64748b' }}>± {r.recovery_uncertainty_days} d</span>
           </div>
-          <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>Predicted Recovery Time (90% target)</span>
+            <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>ARDN expected recovery step (all nodes at configured threshold)</span>
         </div>
       </div>
 
@@ -115,12 +115,12 @@ export default function RecoveryForecast({ forecast }: { forecast: Forecast | un
         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 12px' }}>
           <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', display: 'block' }}>Predicted Service Loss</span>
           <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', margin: '2px 0' }}>{Number(r.service_loss).toFixed(3)}</div>
-          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Drop during shock window</span>
+          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Retailer fulfilment drop during active disruption</span>
         </div>
 
         <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '10px 12px' }}>
           <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', display: 'block' }}>Severe Overflow Risk</span>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0284c7', margin: '2px 0' }}>{r.risk_label?.split(' ')[0] || '< 1%'}</div>
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0284c7', margin: '2px 0' }}>{r.risk_label || 'Not available'}</div>
           <span style={{ fontSize: '0.7rem', color: '#64748b' }}>Backlog &gt; 1.5× capacity</span>
         </div>
 
@@ -129,7 +129,9 @@ export default function RecoveryForecast({ forecast }: { forecast: Forecast | un
           <div style={{ fontSize: '1.1rem', fontWeight: 700, color: r.ood_score > 15 ? '#d97706' : '#15803d', margin: '2px 0' }}>
             {r.ood_score}
           </div>
-          <span style={{ fontSize: '0.7rem', color: '#64748b' }}>{r.ood_status} (Threshold: 15.0)</span>
+          <span style={{ fontSize: '0.7rem', color: r.execution_status === 'review_required' ? '#b45309' : '#64748b' }}>
+            {r.execution_status === 'review_required' ? 'Review required before execution' : r.ood_status} (Threshold: {r.ood_threshold ?? 15.0})
+          </span>
         </div>
       </div>
 
@@ -169,7 +171,7 @@ export default function RecoveryForecast({ forecast }: { forecast: Forecast | un
                     <td style={{ padding: '8px 10px', color: '#64748b' }}>± {opt.recovery_uncertainty_days} d</td>
                     <td style={{ padding: '8px 10px', color: '#0f172a' }}>${opt.predicted_cost}</td>
                     <td style={{ padding: '8px 10px', color: '#0f172a' }}>{Number(opt.service_loss).toFixed(3)}</td>
-                    <td style={{ padding: '8px 10px', color: '#64748b' }}>{opt.risk_label?.split(' ')[0] || '< 1%'}</td>
+                    <td style={{ padding: '8px 10px', color: '#64748b' }}>{opt.risk_label || 'Not available'}</td>
                     <td style={{ padding: '8px 10px', color: opt.ood_score > 15 ? '#d97706' : '#15803d' }}>
                       {opt.ood_score}
                     </td>

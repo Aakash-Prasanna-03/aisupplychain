@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {create, step, negotiate, experiment, runFullSimulation} from './api';
+import {create, step, negotiate, experiment, runFullSimulation, downloadRunReport} from './api';
 import type {Disruption, State, ExperimentConfig, NetworkImport} from './types';
 import Controls from './components/Controls';
 import Network from './components/Network';
@@ -27,6 +27,7 @@ export default function App(){
   const [results,setResults]=useState<any>();
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
+  const [reportBusy,setReportBusy]=useState(false);
   const [page,setPage]=useState<'workspace'|'agents'|'ardn'>('workspace');
 
   async function run(){
@@ -41,6 +42,12 @@ export default function App(){
     }finally{
       setBusy(false);
     }
+  }
+
+  async function downloadReport(){
+    if(!state?.id)return;
+    setReportBusy(true);setError('');
+    try{await downloadRunReport(state.id);}catch(e){console.error(e);setError('The PDF report could not be generated.');}finally{setReportBusy(false);}
   }
 
   const isReady=Boolean(state);
@@ -59,11 +66,11 @@ export default function App(){
     </section>
     <Controls d={d} setD={setD} experiment={experimentConfig} setExperiment={setExperimentConfig} network={network} setNetwork={setNetwork} onRun={run} busy={busy}/>
     <section id="workspace" className={'workspace '+(!isReady?'workspace-empty':'')} aria-label="Simulation workspace">
-      <div className="section-heading"><div><p className="eyebrow">LIVE WORKSPACE</p><h2>{isReady?'Recovery plan overview':'Your results will appear here'}</h2></div>{isReady&&<span className="run-state"><i aria-hidden="true"/> Scenario complete {state?.meta&&` · Negotiation ${state.meta.rounds}/${state.meta.max_rounds||experimentConfig.max_negotiation_rounds}`}</span>}</div>
+      <div className="section-heading"><div><p className="eyebrow">LIVE WORKSPACE</p><h2>{isReady?'Recovery plan overview':'Your results will appear here'}</h2></div>{isReady&&<div style={{display:'flex',alignItems:'center',gap:'12px'}}><button onClick={downloadReport} disabled={reportBusy} style={{border:'1px solid #86efac',background:'#f0fdf4',color:'#166534',borderRadius:'6px',padding:'7px 11px',fontWeight:700,cursor:reportBusy?'wait':'pointer'}}>{reportBusy?'Preparing PDF...':'Download PDF report'}</button><span className="run-state"><i aria-hidden="true"/> Scenario complete {state?.meta&&` · Negotiation ${state.meta.rounds}/${state.meta.max_rounds||experimentConfig.max_negotiation_rounds}`}</span></div>}</div>
       {!isReady?<div className="empty-state"><div className="empty-illustration" aria-hidden="true"><span>●</span><b>→</b><span>●</span><b>→</b><span>●</span></div><h3>Start with a disruption scenario</h3><p>Adjust the inputs above and run the simulation to inspect network health, the proposed agreement, and its safety review.</p></div>:<div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Row 1: Network Physical Flow & Scenario Pulse */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.45fr 1fr', gap: '16px', alignItems: 'stretch' }}>
-          <Network nodes={state?.nodes||[]}/>
+          <Network nodes={state?.nodes||[]} isDisruptionActive={state?.is_disruption_active} networkStatus={state?.network_status}/>
           <Metrics state={state}/>
         </div>
 

@@ -12,10 +12,10 @@ def default_nodes(imported_nodes: list[ImportedNode] | None = None):
     # Nominal parameters: steady-state demand is ~20 units/day.
     # Production capacity is 25 units/day with 1-1.5 days safety buffer.
     defaults = [
-        Node(id="supplier", name="Supplier", inventory=28, capacity=50, production_capacity=25, holding_cost=0.2, shortage_cost=4.0, service_level_target=0.9),
-        Node(id="manufacturer", name="Manufacturer", inventory=22, capacity=45, production_capacity=25, holding_cost=0.2, shortage_cost=4.0, service_level_target=0.9),
-        Node(id="distributor", name="Distributor", inventory=18, capacity=35, production_capacity=0, holding_cost=0.2, shortage_cost=4.0, service_level_target=0.9),
-        Node(id="retailer", name="Retailer", inventory=18, capacity=30, production_capacity=0, holding_cost=0.2, shortage_cost=4.0, service_level_target=0.9),
+        Node(id="supplier", name="Supplier", inventory=28, capacity=50, production_capacity=25, demand=0, holding_cost=0.2, shortage_cost=4.0, service_level_target=0.9),
+        Node(id="manufacturer", name="Manufacturer", inventory=22, capacity=45, production_capacity=25, demand=0, holding_cost=0.2, shortage_cost=4.0, service_level_target=0.9),
+        Node(id="distributor", name="Distributor", inventory=18, capacity=35, production_capacity=0, demand=0, holding_cost=0.2, shortage_cost=4.0, service_level_target=0.9),
+        Node(id="retailer", name="Retailer", inventory=18, capacity=30, production_capacity=0, demand=20, holding_cost=0.2, shortage_cost=4.0, service_level_target=0.9),
     ]
     if not imported_nodes:
         return {n.id: n for n in defaults}
@@ -24,12 +24,22 @@ def default_nodes(imported_nodes: list[ImportedNode] | None = None):
     for fallback in defaults:
         group = grouped[fallback.id]
         count = len(group)
+        known_production = [node.production_capacity for node in group if node.production_capacity is not None]
+        production_available = len(known_production) == count
+        known_demand = [node.demand for node in group if node.demand is not None]
+        demand = sum(known_demand) if known_demand else fallback.demand
+        known_lead_times = [node.lead_time for node in group if node.lead_time is not None]
+        known_operating_costs = [node.operating_cost for node in group if node.operating_cost is not None]
         nodes.append(Node(
             id=fallback.id,
             name=group[0].name if count == 1 else f"{fallback.id.title()} network ({count} nodes)",
             inventory=sum(node.inventory for node in group),
             capacity=sum(node.capacity for node in group),
-            production_capacity=sum(node.production_capacity for node in group),
+            production_capacity=sum(known_production),
+            production_capacity_available=production_available,
+            demand=demand,
+            lead_time=sum(known_lead_times) / len(known_lead_times) if known_lead_times else fallback.lead_time,
+            operating_cost=sum(known_operating_costs) if known_operating_costs else fallback.operating_cost,
             holding_cost=sum(node.holding_cost for node in group) / count,
             shortage_cost=sum(node.shortage_cost for node in group) / count,
             service_level_target=sum(node.service_level_target for node in group) / count,
@@ -43,11 +53,22 @@ class SimulationEngine:
         self.seed = seed
         self.rng = random.Random(seed)
         self.nodes = default_nodes(network.nodes if network else None)
+        self.physical_nodes = list(network.nodes) if network else []
         self.day = 0
         self.imported_network = {
             "active": bool(network),
             "source_node_count": len(network.nodes) if network else 4,
-            "aggregation": "tier totals" if network else "default network"
+            "aggregation": "tier totals" if network else "default network",
+            "physical_nodes": [node.model_dump() for node in self.physical_nodes],
+            "missing_production_capacity": [
+                node.id for node in self.physical_nodes
+                if node.production_capacity is None
+            ],
+            "data_quality": (
+                "Production capacity unavailable for one or more imported nodes; simulation will not infer it."
+                if any(node.production_capacity is None for node in self.physical_nodes)
+                else "All imported production capacities supplied."
+            ),
         }
         self.disruption = disruption or Disruption()
         self.history = []
@@ -97,7 +118,7 @@ class SimulationEngine:
 
     def step(self, agreement: Agreement | None = None):
         self.day += 1
-        fx = effects(self.disruption, self.day)
+        fx = effects(self.disruption, self.day, self.physical_nodes)
         is_active = active(self.disruption, self.day)
         self.last_agreement = agreement
 
@@ -148,11 +169,12 @@ class SimulationEngine:
                         self.nodes[s.to].inventory += q
 
         # 4. Customer demand arrival at retailer
-        demand = round(20 * fx["demand_factor"] + self.rng.randint(-2, 2), 1)
+        retailer = self.nodes["retailer"]
+        nominal_demand = max(float(retailer.demand), 1.0)
+        demand = round(nominal_demand * fx["demand_factor"] + self.rng.randint(-2, 2), 1)
         self.demands.append(demand)
         self.last_demand = demand
 
-        retailer = self.nodes["retailer"]
         served = min(retailer.inventory, demand)
         retailer.inventory -= served
         retailer.service_level = round(served / demand if demand else 1.0, 3)

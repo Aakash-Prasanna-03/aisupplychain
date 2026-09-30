@@ -6,6 +6,8 @@ NodeId = Literal["supplier", "manufacturer", "distributor", "retailer"]
 
 class Node(BaseModel):
     id: NodeId; name: str; inventory: float; capacity: float; production_capacity: float = 0
+    demand: float = 20.0; lead_time: float = 0.0; operating_cost: float = 0.0
+    production_capacity_available: bool = True
     holding_cost: float = 0.2; shortage_cost: float = 4; service_level_target: float = .9
     service_level: float = 1; status: str = "NORMAL"
     status_detail: str = "Operating within nominal limits"
@@ -28,10 +30,10 @@ class Agreement(BaseModel):
     shipments: list[Shipment] = []; production: list[Production] = []; priority_allocations: dict[str, float] = {}
 
 class Route(BaseModel):
-    from_node: NodeId | None = Field(None, alias="from")
-    to_node: NodeId | None = Field(None, alias="to")
-    source: NodeId | None = None
-    destination: NodeId | None = None
+    from_node: str | None = Field(None, alias="from")
+    to_node: str | None = Field(None, alias="to")
+    source: str | None = None
+    destination: str | None = None
     class Config: populate_by_name = True
 
     @model_validator(mode="after")
@@ -46,15 +48,15 @@ class Route(BaseModel):
 
 class DisruptionEffect(BaseModel):
     type: str = Field(min_length=1, max_length=80)
-    target: NodeId | None = None
-    source: NodeId | None = None
-    destination: NodeId | None = None
+    target: str | None = None
+    source: str | None = None
+    destination: str | None = None
     magnitude: float = Field(.4, ge=0, le=1)
     description: str = ""
 
 class Disruption(BaseModel):
     description: str = ""
-    affected_nodes: list[NodeId] = Field(default_factory=list)
+    affected_nodes: list[str] = Field(default_factory=list)
     affected_routes: list[Route] = Field(default_factory=list)
     effects: list[DisruptionEffect] = Field(default_factory=list)
     start_day: int = Field(1, ge=1, le=60)
@@ -83,11 +85,15 @@ NETWORK_ROLE_ALIASES = {
 }
 
 class ImportedNode(BaseModel):
+    id: str | None = Field(None, min_length=1, max_length=80)
     name: str = Field(min_length=1, max_length=120)
     node_type: str = Field(min_length=1, max_length=40)
     inventory: float = Field(ge=0)
     capacity: float = Field(gt=0)
-    production_capacity: float = Field(0, ge=0)
+    production_capacity: float | None = Field(None, ge=0)
+    demand: float | None = Field(None, ge=0)
+    lead_time: float | None = Field(None, ge=0)
+    operating_cost: float | None = Field(None, ge=0)
     holding_cost: float = Field(.2, ge=0)
     shortage_cost: float = Field(4, ge=0)
     service_level_target: float = Field(.9, ge=.1, le=1)
@@ -101,6 +107,7 @@ class NetworkImport(BaseModel):
 
     @model_validator(mode="after")
     def validate_operating_tiers(self):
+        seen_ids: set[str] = set()
         unknown = sorted({node.node_type for node in self.nodes if not node.operating_tier})
         if unknown:
             allowed = ", ".join(sorted(NETWORK_ROLE_ALIASES))
@@ -109,6 +116,14 @@ class NetworkImport(BaseModel):
         missing = [tier for tier in ("supplier", "manufacturer", "distributor", "retailer") if tier not in present]
         if missing:
             raise ValueError(f"Imported network needs at least one node for each operating tier. Missing: {', '.join(missing)}")
+        for index, node in enumerate(self.nodes, start=1):
+            if node.id is None:
+                # Compatibility for older imports without IDs. New imports
+                # retain their supplied physical IDs unchanged.
+                node.id = f"{node.operating_tier[:3].upper()}{index}"
+            if node.id in seen_ids:
+                raise ValueError(f"Duplicate imported node id: {node.id}")
+            seen_ids.add(node.id)
         return self
 
 class SimulationRequest(BaseModel):
